@@ -90,7 +90,7 @@ function CreateContent() {
         return prev.filter((id) => id !== imageId);
       }
       if (prev.length >= 5) {
-        showToast('warning', '최대 5개까지 선택할 수 있습니다.');
+        showToast('info', '최대 5개까지 선택할 수 있습니다.');
         return prev;
       }
       return [...prev, imageId];
