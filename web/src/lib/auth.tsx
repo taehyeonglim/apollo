@@ -38,15 +38,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Firebase 초기화 및 auth 인스턴스 가져오기
-    const authInstance = getAuth();
+    try {
+      console.log('[Auth] Initializing Firebase auth...');
+      // Firebase 초기화 및 auth 인스턴스 가져오기
+      const authInstance = getAuth();
+      console.log('[Auth] Auth instance obtained');
 
-    const unsubscribe = onAuthStateChanged(authInstance, (user) => {
-      setUser(user);
+      const unsubscribe = onAuthStateChanged(authInstance, (user) => {
+        console.log('[Auth] Auth state changed:', user ? user.email : 'null');
+        setUser(user);
+        setLoading(false);
+      });
+
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('[Auth] Firebase initialization error:', error);
+      // 에러 발생 시에도 로딩 상태 해제
       setLoading(false);
-    });
-
-    return () => unsubscribe();
+    }
   }, []);
 
   const signInWithGoogle = async () => {

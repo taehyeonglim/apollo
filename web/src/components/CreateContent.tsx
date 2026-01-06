@@ -414,6 +414,17 @@ function CreateInner() {
 
             {/* 생성 버튼 */}
             <div className="pt-4">
+              {/* 조건 미충족 안내 */}
+              {(diaryText.length < 10 || characterSheetText.length < 50) && (
+                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                  {diaryText.length < 10 && (
+                    <p>• 일기를 10자 이상 작성해주세요 (현재 {diaryText.length}자)</p>
+                  )}
+                  {characterSheetText.length < 50 && (
+                    <p>• 캐릭터 설명을 50자 이상 작성해주세요 (현재 {characterSheetText.length}자)</p>
+                  )}
+                </div>
+              )}
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating || diaryText.length < 10 || characterSheetText.length < 50}
