@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { RequireAuth, useAuth } from '@/lib/auth';
 import { useToast } from '@/components/Toast';
 import { generateStoryboard } from '@/lib/api';
-import { uploadReferenceImages } from '@/lib/storage';
+import { uploadReferenceImages, getLibraryImageUrl } from '@/lib/storage';
+import { getLibraryImages } from '@/lib/firestore';
+import type { LibraryImage } from '@/types';
 
 // Episode ID 생성 (nanoid 스타일)
 function generateEpisodeId(): string {
@@ -37,8 +40,62 @@ function CreateContent() {
   const [refImages, setRefImages] = useState<File[]>([]);
   const [refImagePreviews, setRefImagePreviews] = useState<string[]>([]);
 
+  // 라이브러리 상태
+  const [refSource, setRefSource] = useState<'upload' | 'library'>('upload');
+  const [libraryImages, setLibraryImages] = useState<LibraryImage[]>([]);
+  const [libraryImageUrls, setLibraryImageUrls] = useState<Record<string, string>>({});
+  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+
   // 로딩 상태
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // 라이브러리 이미지 로드
+  useEffect(() => {
+    if (refSource === 'library' && user && libraryImages.length === 0) {
+      setIsLoadingLibrary(true);
+      getLibraryImages(user.uid)
+        .then(setLibraryImages)
+        .catch(console.error)
+        .finally(() => setIsLoadingLibrary(false));
+    }
+  }, [refSource, user, libraryImages.length]);
+
+  // 라이브러리 이미지 URL 로드
+  useEffect(() => {
+    const loadUrls = async () => {
+      const urls: Record<string, string> = {};
+      for (const img of libraryImages) {
+        if (!libraryImageUrls[img.id]) {
+          try {
+            urls[img.id] = await getLibraryImageUrl(img.storagePath);
+          } catch (error) {
+            console.error('Failed to load image URL:', error);
+          }
+        }
+      }
+      if (Object.keys(urls).length > 0) {
+        setLibraryImageUrls((prev) => ({ ...prev, ...urls }));
+      }
+    };
+    if (libraryImages.length > 0) {
+      loadUrls();
+    }
+  }, [libraryImages, libraryImageUrls]);
+
+  // 라이브러리 이미지 선택 토글
+  const toggleLibraryImage = (imageId: string) => {
+    setSelectedLibraryIds((prev) => {
+      if (prev.includes(imageId)) {
+        return prev.filter((id) => id !== imageId);
+      }
+      if (prev.length >= 5) {
+        showToast('warning', '최대 5개까지 선택할 수 있습니다.');
+        return prev;
+      }
+      return [...prev, imageId];
+    });
+  };
 
   // 이미지 업로드 핸들러
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,10 +143,16 @@ function CreateContent() {
       const episodeId = generateEpisodeId();
       let refImagePaths: string[] = [];
 
-      // 1. 레퍼런스 이미지 업로드 (temp/{userId}/ 경로로)
-      if (refImages.length > 0) {
+      // 1. 레퍼런스 이미지 처리
+      if (refSource === 'upload' && refImages.length > 0) {
+        // 새로 업로드하는 경우
         showToast('info', '레퍼런스 이미지 업로드 중...');
         refImagePaths = await uploadReferenceImages(user.uid, episodeId, refImages);
+      } else if (refSource === 'library' && selectedLibraryIds.length > 0) {
+        // 라이브러리에서 선택한 경우 - Storage 경로 직접 사용
+        refImagePaths = selectedLibraryIds
+          .map((id) => libraryImages.find((img) => img.id === id)?.storagePath)
+          .filter((path): path is string => !!path);
       }
 
       // 2. 스토리보드 생성
@@ -180,42 +243,145 @@ function CreateContent() {
                 👤 캐릭터 레퍼런스 이미지 (선택)
               </label>
               <p className="text-sm text-gray-500 mb-3">
-                캐릭터 스타일 참고용 이미지를 업로드해주세요 (최대 5장)
+                캐릭터 스타일 참고용 이미지를 선택해주세요 (최대 5장)
               </p>
-              <div className="flex flex-wrap gap-3">
-                {refImagePreviews.map((preview, index) => (
-                  <div
-                    key={index}
-                    className="relative w-24 h-24 rounded-xl overflow-hidden bg-gray-100"
-                  >
-                    <img
-                      src={preview}
-                      alt={`Reference ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      onClick={() => removeImage(index)}
-                      className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600"
-                      disabled={isGenerating}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {refImages.length < 5 && (
-                  <label className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      disabled={isGenerating}
-                    />
-                    <span className="text-3xl text-gray-400">+</span>
-                  </label>
-                )}
+
+              {/* 탭 선택 */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setRefSource('upload')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    refSource === 'upload'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  disabled={isGenerating}
+                >
+                  새로 업로드
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRefSource('library')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    refSource === 'library'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  disabled={isGenerating}
+                >
+                  라이브러리에서 선택
+                </button>
               </div>
+
+              {/* 새로 업로드 */}
+              {refSource === 'upload' && (
+                <div className="flex flex-wrap gap-3">
+                  {refImagePreviews.map((preview, index) => (
+                    <div
+                      key={index}
+                      className="relative w-24 h-24 rounded-xl overflow-hidden bg-gray-100"
+                    >
+                      <img
+                        src={preview}
+                        alt={`Reference ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        onClick={() => removeImage(index)}
+                        className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600"
+                        disabled={isGenerating}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {refImages.length < 5 && (
+                    <label className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        disabled={isGenerating}
+                      />
+                      <span className="text-3xl text-gray-400">+</span>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* 라이브러리에서 선택 */}
+              {refSource === 'library' && (
+                <div>
+                  {isLoadingLibrary ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : libraryImages.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>라이브러리에 이미지가 없습니다.</p>
+                      <button
+                        type="button"
+                        onClick={() => router.push('/library')}
+                        className="mt-2 text-indigo-600 hover:underline"
+                      >
+                        라이브러리로 이동하여 이미지 업로드하기
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-3">
+                        {libraryImages.map((image) => (
+                          <button
+                            key={image.id}
+                            type="button"
+                            onClick={() => toggleLibraryImage(image.id)}
+                            className={`relative w-24 h-24 rounded-xl overflow-hidden bg-gray-100 transition-all ${
+                              selectedLibraryIds.includes(image.id)
+                                ? 'ring-3 ring-indigo-500 ring-offset-2'
+                                : 'hover:ring-2 hover:ring-gray-300'
+                            }`}
+                            disabled={isGenerating}
+                          >
+                            {libraryImageUrls[image.id] ? (
+                              <Image
+                                src={libraryImageUrls[image.id]}
+                                alt={image.name}
+                                fill
+                                className="object-cover"
+                                sizes="96px"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                              </div>
+                            )}
+                            {selectedLibraryIds.includes(image.id) && (
+                              <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
+                                <span className="text-white text-2xl">✓</span>
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-sm text-gray-500 mt-3">
+                        {selectedLibraryIds.length}개 선택됨
+                        {selectedLibraryIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLibraryIds([])}
+                            className="ml-2 text-red-500 hover:underline"
+                          >
+                            선택 해제
+                          </button>
+                        )}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* 4. 캐릭터 설명 */}

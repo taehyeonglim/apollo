@@ -47,6 +47,30 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
+
+      // ----------------------------------------
+      // library 서브컬렉션 (레퍼런스 이미지 메타데이터)
+      // ----------------------------------------
+      match /library/{imageId} {
+        // 읽기: 본인만
+        allow read: if request.auth != null && request.auth.uid == userId;
+
+        // 쓰기: 본인만, 필수 필드 검증
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.keys().hasAll(['name', 'storagePath', 'createdAt'])
+                      && request.resource.data.name is string
+                      && request.resource.data.name.size() <= 100
+                      && request.resource.data.storagePath is string;
+
+        // 수정: 본인만, name만 수정 가능
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'updatedAt']);
+
+        // 삭제: 본인만
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
     }
   }
 }
