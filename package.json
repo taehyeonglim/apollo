@@ -1,0 +1,28 @@
+{
+  "name": "apollo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A.P.O.L.L.O. - AI-Prompt-Orchestrated Life Log Overlays",
+  "scripts": {
+    "dev": "npm run dev --prefix web",
+    "build": "npm run build --prefix web && npm run build --prefix functions",
+    "build:web": "npm run build --prefix web",
+    "build:functions": "npm run build --prefix functions",
+    "emulators": "firebase emulators:start",
+    "emulators:ui": "firebase emulators:start --only firestore,storage",
+    "deploy": "firebase deploy",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:rules": "firebase deploy --only firestore:rules,storage:rules",
+    "seed": "node scripts/seed-character.js"
+  },
+  "keywords": [
+    "firebase",
+    "gemini",
+    "ai",
+    "webtoon",
+    "instatoon"
+  ],
+  "author": "",
+  "license": "MIT"
+}

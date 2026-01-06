@@ -1,0 +1,24 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // 생성된 패널 이미지 - 읽기 공개
+    match /panels/{toonId}/{panelId} {
+      allow read: if true;
+      allow write: if false; // Functions에서만 Admin SDK로 업로드
+    }
+
+    // 캐릭터 레퍼런스 이미지 - 읽기는 Functions만
+    match /characters/{characterId}/{fileName} {
+      allow read: if false; // Functions에서만 읽음
+      allow write: if false;
+    }
+
+    // 임시 업로드 (드래프트용)
+    match /temp/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

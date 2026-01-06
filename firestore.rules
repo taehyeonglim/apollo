@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 툰 컬렉션 - 읽기는 공개, 쓰기는 Functions만
+    match /toons/{toonId} {
+      allow read: if true;
+      allow write: if false; // Functions에서만 Admin SDK로 쓰기
+
+      // 댓글 서브컬렉션
+      match /comments/{commentId} {
+        allow read: if true;
+        // App Check 검증된 요청만 허용
+        allow create: if request.resource.data.keys().hasAll(['emoji', 'text', 'createdAt'])
+          && request.resource.data.emoji is string
+          && request.resource.data.emoji.size() <= 4
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 80
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // 드래프트 (편집중인 툰) - 임시 저장용
+    match /drafts/{draftId} {
+      allow read, write: if true; // MVP에서는 열어둠, 추후 인증 추가
+    }
+
+    // 캐릭터 시트 (관리자만 수정)
+    match /characters/{characterId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Rate limit 카운터 (Functions에서 관리)
+    match /rateLimits/{ip} {
+      allow read, write: if false;
+    }
+  }
+}
