@@ -64,7 +64,7 @@ jobs:
         run: firebase experiments:enable webframeworks
 
       - name: Deploy Functions and Firestore Rules
-        run: firebase deploy --only functions,firestore:rules --project ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: firebase deploy --only functions,firestore:rules --force --project ${{ secrets.FIREBASE_PROJECT_ID }}
 
       - name: Deploy Storage Rules
         run: firebase deploy --only storage --project ${{ secrets.FIREBASE_PROJECT_ID }}
