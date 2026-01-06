@@ -1,24 +1,45 @@
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // 생성된 패널 이미지 - 읽기 공개
-    match /panels/{toonId}/{panelId} {
-      allow read: if true;
-      allow write: if false; // Functions에서만 Admin SDK로 업로드
-    }
+    // ============================================
+    // episodes/{episodeId}/ 하위 파일들
+    // ============================================
 
-    // 캐릭터 레퍼런스 이미지 - 읽기는 Functions만
-    match /characters/{characterId}/{fileName} {
-      allow read: if false; // Functions에서만 읽음
+    // 캐릭터 레퍼런스 이미지 (Functions에서만 읽기/쓰기)
+    match /episodes/{episodeId}/refs/{filename} {
+      // 읽기: Functions Admin SDK만 (이미지 생성 시 사용)
+      allow read: if false;
       allow write: if false;
     }
 
-    // 임시 업로드 (드래프트용)
-    match /temp/{userId}/{fileName} {
+    // 패널 이미지 (published episode만 공개 읽기)
+    match /episodes/{episodeId}/panels/{filename} {
+      // 읽기: 누구나 (실제 접근 제어는 Firestore episode.status로)
+      // Note: Storage rules에서 Firestore 조회 불가하므로 공개 읽기 허용
+      // 실제 보안은 signed URL 또는 CDN 레벨에서 처리 권장
       allow read: if true;
-      allow write: if request.resource.size < 5 * 1024 * 1024
+      allow write: if false; // Functions Admin SDK만
+    }
+
+    // 썸네일 이미지
+    match /episodes/{episodeId}/thumb.png {
+      allow read: if true;
+      allow write: if false; // Functions Admin SDK만
+    }
+
+    // ============================================
+    // 임시 업로드 (캐릭터 레퍼런스 업로드용)
+    // ============================================
+    match /temp/{userId}/{filename} {
+      // 인증된 사용자만 자신의 폴더에 업로드 가능
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024  // 5MB 제한
                    && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
   }
 }

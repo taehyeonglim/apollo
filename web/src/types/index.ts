@@ -1,92 +1,113 @@
 // ==========================================
-// A.P.O.L.L.O. 타입 정의
+// A.P.O.L.L.O. Firestore 스키마 타입 정의
 // ==========================================
 
 /**
- * 패널 이미지 정보
+ * Episode 상태
+ */
+export type EpisodeStatus = 'draft' | 'published';
+
+/**
+ * 패널 정보 (Firestore 저장용)
  */
 export interface Panel {
-  id: string;
-  order: number;
-  imageUrl: string;
+  index: number;
+  imagePath: string; // Storage 경로: episodes/{episodeId}/panels/{index}.png
   caption: string;
-  prompt: string; // 이미지 생성에 사용된 최종 프롬프트
-  generatedAt: Date;
 }
 
 /**
- * 스토리보드 (텍스트모델 결과)
+ * 패널별 프롬프트 (finalPrompt 내부)
  */
-export interface Storyboard {
-  title: string;
-  summary: string;
-  panels: PanelSpec[];
-  style: StyleSpec;
-}
-
-export interface PanelSpec {
-  order: number;
+export interface PanelPrompt {
+  index: number;
   scene: string;
+  imagePrompt: string; // 이미지 생성에 사용된 최종 프롬프트 (영문)
   caption: string;
-  imagePrompt: string;
   emotion: string;
   composition: string;
 }
 
-export interface StyleSpec {
+/**
+ * 전역 스타일 정보 (finalPrompt 내부)
+ */
+export interface GlobalStyle {
   artStyle: string;
   colorPalette: string;
   mood: string;
+  characterDescription: string; // 캐릭터 텍스트 시트
 }
 
 /**
- * 툰 상태
+ * 최종 프롬프트 (중간 프롬프트는 저장 안 함)
  */
-export type ToonStatus = 'draft' | 'generating' | 'ready' | 'published';
+export interface FinalPrompt {
+  title: string;
+  summary: string;
+  globalStyle: GlobalStyle;
+  panels: PanelPrompt[];
+  generatedAt: Date;
+}
 
 /**
- * 툰 문서 (Firestore)
+ * Episode 문서 (Firestore: episodes/{episodeId})
  */
-export interface Toon {
+export interface Episode {
   id: string;
+  status: EpisodeStatus;
   title: string;
-  originalDiary: string; // 원본 일기 텍스트
-  storyboard: Storyboard; // 최종 스토리보드
+  diaryText: string; // 원본 일기 텍스트
+  finalPrompt: FinalPrompt; // 최종 버전만 저장
+  panelCount: number;
   panels: Panel[];
-  status: ToonStatus;
-  characterId: string; // 사용된 캐릭터 ID
+  thumbPath?: string; // Storage 경로: episodes/{episodeId}/thumb.png
   createdAt: Date;
   updatedAt: Date;
   publishedAt?: Date;
-  viewCount: number;
-  commentCount: number;
+  creatorUid: string; // Firebase Auth UID
 }
 
 /**
- * 드래프트 (편집중인 툰)
+ * Episode 생성 시 입력 (클라이언트 → Functions)
  */
-export interface Draft {
+export interface CreateEpisodeInput {
+  diaryText: string;
+  panelCount?: number; // 기본 4
+  characterId?: string; // 캐릭터 선택 (기본 'default')
+}
+
+/**
+ * Comment Moderation 정보
+ */
+export interface CommentModeration {
+  flagged: boolean;
+  reason?: string;
+}
+
+/**
+ * Comment 문서 (Firestore: episodes/{episodeId}/comments/{commentId})
+ */
+export interface Comment {
   id: string;
-  originalDiary: string;
-  storyboard?: Storyboard;
-  panels: Panel[];
-  characterId: string;
+  emoji: string; // 이모지 1개
+  text: string; // 최대 80자
   createdAt: Date;
-  updatedAt: Date;
+  anonIdHash: string; // 익명 식별자 해시 (rate limit용)
+  moderation: CommentModeration;
 }
 
 /**
- * 캐릭터 시트
+ * Comment 생성 시 입력 (클라이언트 → Functions)
  */
-export interface Character {
-  id: string;
-  name: string;
-  description: string; // 디테일한 텍스트 설명
-  referenceImageUrls: string[]; // 레퍼런스 이미지들
-  defaultStyle: string; // 기본 그림체
-  traits: CharacterTraits;
+export interface CreateCommentInput {
+  episodeId: string;
+  emoji: string;
+  text: string;
 }
 
+/**
+ * 캐릭터 특성
+ */
 export interface CharacterTraits {
   age: string;
   gender: string;
@@ -102,57 +123,57 @@ export interface CharacterTraits {
 }
 
 /**
- * 댓글 (이모지 + 짧은 코멘트)
+ * Character 문서 (Firestore: characters/{characterId})
  */
-export interface Comment {
+export interface Character {
   id: string;
-  toonId: string;
-  emoji: string; // 단일 이모지
-  text: string; // 최대 80자
-  createdAt: Date;
-  ipHash?: string; // rate limit용 (저장하지 않음)
+  name: string;
+  description: string; // 디테일한 텍스트 설명
+  referenceImagePaths: string[]; // Storage 경로들
+  defaultStyle: string;
+  traits: CharacterTraits;
 }
 
-/**
- * API 요청/응답 타입
- */
+// ==========================================
+// API 요청/응답 타입
+// ==========================================
+
 export interface GenerateStoryboardRequest {
-  diary: string;
-  characterId: string;
-  panelCount?: number; // 기본 4
+  diaryText: string;
+  characterId?: string;
+  panelCount?: number;
 }
 
 export interface GenerateStoryboardResponse {
   success: boolean;
-  draftId: string;
-  storyboard: Storyboard;
+  episodeId?: string;
+  finalPrompt?: FinalPrompt;
   error?: string;
 }
 
-export interface GeneratePanelRequest {
-  draftId: string;
+export interface GeneratePanelImageRequest {
+  episodeId: string;
   panelIndex: number;
   regenerate?: boolean;
 }
 
-export interface GeneratePanelResponse {
+export interface GeneratePanelImageResponse {
   success: boolean;
-  panel: Panel;
+  panel?: Panel;
   error?: string;
 }
 
-export interface PublishToonRequest {
-  draftId: string;
+export interface PublishEpisodeRequest {
+  episodeId: string;
 }
 
-export interface PublishToonResponse {
+export interface PublishEpisodeResponse {
   success: boolean;
-  toonId: string;
   error?: string;
 }
 
 export interface AddCommentRequest {
-  toonId: string;
+  episodeId: string;
   emoji: string;
   text: string;
 }
@@ -163,9 +184,32 @@ export interface AddCommentResponse {
   error?: string;
 }
 
-/**
- * 허용된 이모지 목록
- */
+// ==========================================
+// Storage 경로 헬퍼
+// ==========================================
+
+export const StoragePaths = {
+  /** 캐릭터 레퍼런스 이미지 */
+  episodeRef: (episodeId: string, filename: string) =>
+    `episodes/${episodeId}/refs/${filename}`,
+
+  /** 패널 이미지 */
+  episodePanel: (episodeId: string, index: number) =>
+    `episodes/${episodeId}/panels/${index}.png`,
+
+  /** 썸네일 */
+  episodeThumb: (episodeId: string) =>
+    `episodes/${episodeId}/thumb.png`,
+
+  /** 임시 업로드 */
+  tempUpload: (userId: string, filename: string) =>
+    `temp/${userId}/${filename}`,
+} as const;
+
+// ==========================================
+// 허용된 이모지 목록
+// ==========================================
+
 export const ALLOWED_EMOJIS = [
   '😀', '😂', '🥹', '😍', '🥰',
   '😢', '😭', '😱', '🤯', '🤔',
@@ -174,3 +218,22 @@ export const ALLOWED_EMOJIS = [
 ] as const;
 
 export type AllowedEmoji = typeof ALLOWED_EMOJIS[number];
+
+// ==========================================
+// 유틸리티 타입
+// ==========================================
+
+/** Firestore Timestamp을 Date로 변환한 타입 */
+export type WithDates<T> = Omit<T, 'createdAt' | 'updatedAt' | 'publishedAt' | 'generatedAt'> & {
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt?: Date;
+  generatedAt?: Date;
+};
+
+/** 페이지네이션 응답 */
+export interface PaginatedResponse<T> {
+  items: T[];
+  hasMore: boolean;
+  lastId?: string;
+}

@@ -1,40 +1,52 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 툰 컬렉션 - 읽기는 공개, 쓰기는 Functions만
-    match /toons/{toonId} {
-      allow read: if true;
-      allow write: if false; // Functions에서만 Admin SDK로 쓰기
+    // ============================================
+    // episodes 컬렉션
+    // ============================================
+    match /episodes/{episodeId} {
+      // 읽기: published는 누구나, draft는 creator만
+      allow read: if resource.data.status == 'published'
+                  || (request.auth != null && resource.data.creatorUid == request.auth.uid);
 
-      // 댓글 서브컬렉션
+      // 쓰기: 클라이언트 직접 쓰기 금지 (Functions Admin SDK만)
+      allow create, update, delete: if false;
+
+      // ----------------------------------------
+      // comments 서브컬렉션
+      // ----------------------------------------
       match /comments/{commentId} {
-        allow read: if true;
-        // App Check 검증된 요청만 허용
-        allow create: if request.resource.data.keys().hasAll(['emoji', 'text', 'createdAt'])
-          && request.resource.data.emoji is string
-          && request.resource.data.emoji.size() <= 4
-          && request.resource.data.text is string
-          && request.resource.data.text.size() <= 80
-          && request.resource.data.createdAt == request.time;
-        allow update, delete: if false;
+        // 읽기: 상위 episode가 published인 경우만
+        allow read: if get(/databases/$(database)/documents/episodes/$(episodeId)).data.status == 'published';
+
+        // 쓰기: 클라이언트 직접 쓰기 금지 (callable function 통해서만)
+        allow create, update, delete: if false;
       }
     }
 
-    // 드래프트 (편집중인 툰) - 임시 저장용
-    match /drafts/{draftId} {
-      allow read, write: if true; // MVP에서는 열어둠, 추후 인증 추가
-    }
-
-    // 캐릭터 시트 (관리자만 수정)
+    // ============================================
+    // characters 컬렉션 (캐릭터 시트)
+    // ============================================
     match /characters/{characterId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if false; // Admin만
     }
 
-    // Rate limit 카운터 (Functions에서 관리)
-    match /rateLimits/{ip} {
-      allow read, write: if false;
+    // ============================================
+    // rateLimits 컬렉션 (Functions에서 관리)
+    // ============================================
+    match /rateLimits/{docId} {
+      allow read, write: if false; // Functions Admin SDK만
+    }
+
+    // ============================================
+    // users 컬렉션 (향후 확장용)
+    // ============================================
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
     }
   }
 }
