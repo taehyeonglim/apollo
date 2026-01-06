@@ -3,9 +3,15 @@ import {
   uploadBytes,
   getDownloadURL,
   deleteObject,
+  FirebaseStorage,
 } from 'firebase/storage';
-import { storage } from './firebase';
+import { initializeFirebase } from './firebase';
 import { StoragePaths } from '@/types';
+
+// Storage 인스턴스를 lazy하게 가져오기
+function getStorage(): FirebaseStorage {
+  return initializeFirebase().storage;
+}
 
 /**
  * 레퍼런스 이미지를 temp 경로에 업로드
@@ -20,7 +26,7 @@ export async function uploadReferenceImage(
   const ext = file.name.split('.').pop() || 'png';
   const filename = `${episodeId}_ref_${index}.${ext}`;
   const path = StoragePaths.tempUpload(userId, filename);
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getStorage(), path);
 
   await uploadBytes(storageRef, file, {
     contentType: file.type,
@@ -51,7 +57,7 @@ export async function uploadReferenceImages(
  * Storage 경로에서 공개 URL 가져오기
  */
 export async function getPublicUrl(path: string): Promise<string> {
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getStorage(), path);
   return getDownloadURL(storageRef);
 }
 
@@ -59,7 +65,7 @@ export async function getPublicUrl(path: string): Promise<string> {
  * Storage 경로에서 파일 삭제
  */
 export async function deleteFile(path: string): Promise<void> {
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getStorage(), path);
   await deleteObject(storageRef);
 }
 
@@ -98,7 +104,7 @@ export async function uploadLibraryImage(
   const randomStr = Math.random().toString(36).substring(2, 8);
   const filename = `${timestamp}_${randomStr}.${ext}`;
   const path = StoragePaths.libraryImage(userId, filename);
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getStorage(), path);
 
   await uploadBytes(storageRef, file, {
     contentType: file.type,
