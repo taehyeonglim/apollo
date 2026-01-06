@@ -6,8 +6,8 @@ import Image from 'next/image';
 import { RequireAuth, useAuth } from '@/lib/auth';
 import { useToast } from '@/components/Toast';
 import { generateStoryboard } from '@/lib/api';
-import { uploadReferenceImages, getLibraryImageUrl } from '@/lib/storage';
-import { getLibraryImages } from '@/lib/firestore';
+import { uploadLibraryImage, getLibraryImageUrl } from '@/lib/storage';
+import { getLibraryImages, addLibraryImage } from '@/lib/firestore';
 import type { LibraryImage } from '@/types';
 
 // Episode ID 생성 (nanoid 스타일)
@@ -145,9 +145,14 @@ function CreateContent() {
 
       // 1. 레퍼런스 이미지 처리
       if (refSource === 'upload' && refImages.length > 0) {
-        // 새로 업로드하는 경우
+        // 새로 업로드하는 경우 → 라이브러리에 저장
         showToast('info', '레퍼런스 이미지 업로드 중...');
-        refImagePaths = await uploadReferenceImages(user.uid, episodeId, refImages);
+        for (const file of refImages) {
+          const storagePath = await uploadLibraryImage(user.uid, file);
+          const name = file.name.replace(/\.[^/.]+$/, ''); // 확장자 제거
+          await addLibraryImage(user.uid, storagePath, name);
+          refImagePaths.push(storagePath);
+        }
       } else if (refSource === 'library' && selectedLibraryIds.length > 0) {
         // 라이브러리에서 선택한 경우 - Storage 경로 직접 사용
         refImagePaths = selectedLibraryIds
