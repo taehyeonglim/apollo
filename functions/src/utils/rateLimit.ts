@@ -1,26 +1,131 @@
 import * as admin from 'firebase-admin';
+import { RATE_LIMIT_CONFIG } from './types';
 
 const db = admin.firestore();
 
-interface RateLimitDoc {
-  count: number;
-  windowStart: FirebaseFirestore.Timestamp;
+interface AnonRateLimitDoc {
+  minuteCount: number;
+  minuteWindowStart: FirebaseFirestore.Timestamp;
+  dayCount: number;
+  dayWindowStart: FirebaseFirestore.Timestamp;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  remainingMinute: number;
+  remainingDay: number;
+  retryAfterSeconds?: number;
+  errorType?: 'minute' | 'day';
 }
 
 /**
- * IP 기반 Rate Limiting
- * @param ip 클라이언트 IP
- * @param action 액션 종류
- * @param maxRequests 윈도우당 최대 요청 수
- * @param windowMs 윈도우 크기 (밀리초)
+ * anonId 기반 Rate Limiting (분/일 이중 제한)
+ * @param anonIdHash 해시된 익명 ID
+ * @param action 액션 종류 (예: 'comment')
+ */
+export async function checkAnonRateLimit(
+  anonIdHash: string,
+  action: keyof typeof RATE_LIMIT_CONFIG
+): Promise<RateLimitResult> {
+  const config = RATE_LIMIT_CONFIG[action];
+  const docRef = db.collection('rateLimits').doc(`anon_${anonIdHash}_${action}`);
+
+  return db.runTransaction(async (transaction) => {
+    const doc = await transaction.get(docRef);
+    const now = admin.firestore.Timestamp.now();
+    const nowMs = now.toMillis();
+
+    if (!doc.exists) {
+      // 첫 요청
+      transaction.set(docRef, {
+        minuteCount: 1,
+        minuteWindowStart: now,
+        dayCount: 1,
+        dayWindowStart: now,
+      });
+      return {
+        allowed: true,
+        remainingMinute: config.perMinute - 1,
+        remainingDay: config.perDay - 1,
+      };
+    }
+
+    const data = doc.data() as AnonRateLimitDoc;
+    const minuteWindowStartMs = data.minuteWindowStart.toMillis();
+    const dayWindowStartMs = data.dayWindowStart.toMillis();
+
+    let newMinuteCount = data.minuteCount;
+    let newDayCount = data.dayCount;
+    let newMinuteWindowStart = data.minuteWindowStart;
+    let newDayWindowStart = data.dayWindowStart;
+
+    // 분 윈도우 체크
+    if (nowMs - minuteWindowStartMs > config.minuteWindowMs) {
+      // 분 윈도우 리셋
+      newMinuteCount = 0;
+      newMinuteWindowStart = now;
+    }
+
+    // 일 윈도우 체크
+    if (nowMs - dayWindowStartMs > config.dayWindowMs) {
+      // 일 윈도우 리셋
+      newDayCount = 0;
+      newDayWindowStart = now;
+    }
+
+    // 분 한도 체크
+    if (newMinuteCount >= config.perMinute) {
+      const retryAfter = Math.ceil(
+        (config.minuteWindowMs - (nowMs - newMinuteWindowStart.toMillis())) / 1000
+      );
+      return {
+        allowed: false,
+        remainingMinute: 0,
+        remainingDay: config.perDay - newDayCount,
+        retryAfterSeconds: retryAfter,
+        errorType: 'minute',
+      };
+    }
+
+    // 일 한도 체크
+    if (newDayCount >= config.perDay) {
+      const retryAfter = Math.ceil(
+        (config.dayWindowMs - (nowMs - newDayWindowStart.toMillis())) / 1000
+      );
+      return {
+        allowed: false,
+        remainingMinute: config.perMinute - newMinuteCount,
+        remainingDay: 0,
+        retryAfterSeconds: retryAfter,
+        errorType: 'day',
+      };
+    }
+
+    // 카운트 증가
+    transaction.set(docRef, {
+      minuteCount: newMinuteCount + 1,
+      minuteWindowStart: newMinuteWindowStart,
+      dayCount: newDayCount + 1,
+      dayWindowStart: newDayWindowStart,
+    });
+
+    return {
+      allowed: true,
+      remainingMinute: config.perMinute - newMinuteCount - 1,
+      remainingDay: config.perDay - newDayCount - 1,
+    };
+  });
+}
+
+/**
+ * IP 기반 Rate Limiting (다른 기능용)
  */
 export async function checkRateLimit(
   ip: string,
   action: string,
   maxRequests: number = 10,
-  windowMs: number = 60 * 1000 // 1분
+  windowMs: number = 60 * 1000
 ): Promise<{ allowed: boolean; remaining: number }> {
-  // IP 해시 생성 (개인정보 보호)
   const crypto = await import('crypto');
   const ipHash = crypto.createHash('sha256').update(ip + action).digest('hex').substring(0, 16);
 
@@ -31,7 +136,6 @@ export async function checkRateLimit(
     const now = admin.firestore.Timestamp.now();
 
     if (!doc.exists) {
-      // 첫 요청
       transaction.set(docRef, {
         count: 1,
         windowStart: now,
@@ -39,12 +143,11 @@ export async function checkRateLimit(
       return { allowed: true, remaining: maxRequests - 1 };
     }
 
-    const data = doc.data() as RateLimitDoc;
+    const data = doc.data() as { count: number; windowStart: FirebaseFirestore.Timestamp };
     const windowStartMs = data.windowStart.toMillis();
     const nowMs = now.toMillis();
 
     if (nowMs - windowStartMs > windowMs) {
-      // 윈도우 만료, 리셋
       transaction.set(docRef, {
         count: 1,
         windowStart: now,
@@ -53,11 +156,9 @@ export async function checkRateLimit(
     }
 
     if (data.count >= maxRequests) {
-      // 한도 초과
       return { allowed: false, remaining: 0 };
     }
 
-    // 카운트 증가
     transaction.update(docRef, {
       count: admin.firestore.FieldValue.increment(1),
     });
@@ -72,13 +173,11 @@ export async function checkRateLimit(
 export function getClientIP(request: { rawRequest: { headers: Record<string, string | string[] | undefined> } }): string {
   const headers = request.rawRequest.headers;
 
-  // Firebase Hosting / Cloud Run은 x-forwarded-for 사용
   const forwarded = headers['x-forwarded-for'];
   if (forwarded) {
     const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     return ips.split(',')[0].trim();
   }
 
-  // 직접 연결 (로컬 개발)
   return headers['x-real-ip'] as string || '127.0.0.1';
 }

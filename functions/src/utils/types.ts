@@ -197,4 +197,18 @@ export interface AddCommentRequest {
   episodeId: string;
   emoji: string;
   text: string;
+  anonId: string;  // 클라이언트 localStorage UUID
 }
+
+// ==========================================
+// Rate Limit 설정
+// ==========================================
+
+export const RATE_LIMIT_CONFIG = {
+  comment: {
+    perMinute: 3,      // 1분당 최대 3개
+    perDay: 30,        // 1일당 최대 30개
+    minuteWindowMs: 60 * 1000,
+    dayWindowMs: 24 * 60 * 60 * 1000,
+  },
+} as const;

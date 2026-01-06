@@ -1,13 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { subscribeToComments } from '@/lib/firestore';
 import { addComment } from '@/lib/api';
-import type { Comment } from '@/types';
-import { ALLOWED_EMOJIS } from '@/types';
+import type { Comment, AddCommentRequest } from '@/types';
 
 interface CommentSectionProps {
   episodeId: string;
+}
+
+// 선별된 이모지 (10개)
+const COMMENT_EMOJIS = ['👍', '❤️', '😂', '😍', '😮', '😢', '🔥', '✨', '👏', '💯'] as const;
+
+/**
+ * localStorage에서 anonId 가져오기 또는 생성
+ */
+function getOrCreateAnonId(): string {
+  const STORAGE_KEY = 'apollo_anon_id';
+
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  let anonId = localStorage.getItem(STORAGE_KEY);
+
+  if (!anonId) {
+    // UUID v4 생성
+    anonId = crypto.randomUUID();
+    localStorage.setItem(STORAGE_KEY, anonId);
+  }
+
+  return anonId;
 }
 
 export default function CommentSection({ episodeId }: CommentSectionProps) {
@@ -17,6 +40,13 @@ export default function CommentSection({ episodeId }: CommentSectionProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [remainingInfo, setRemainingInfo] = useState<{ minute: number; day: number } | null>(null);
+  const [anonId, setAnonId] = useState<string>('');
+
+  // anonId 초기화
+  useEffect(() => {
+    setAnonId(getOrCreateAnonId());
+  }, []);
 
   // 댓글 실시간 구독
   useEffect(() => {
@@ -24,11 +54,16 @@ export default function CommentSection({ episodeId }: CommentSectionProps) {
     return () => unsubscribe();
   }, [episodeId]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedEmoji) {
       setError('이모지를 선택해주세요.');
+      return;
+    }
+
+    if (!anonId) {
+      setError('잠시 후 다시 시도해주세요.');
       return;
     }
 
@@ -37,32 +72,55 @@ export default function CommentSection({ episodeId }: CommentSectionProps) {
     setSuccess(false);
 
     try {
-      const result = await addComment({
+      const request: AddCommentRequest = {
         episodeId,
         emoji: selectedEmoji,
         text: text.trim(),
-      });
+        anonId,
+      };
+
+      const result = await addComment(request);
 
       if (result.success) {
         setSelectedEmoji(null);
         setText('');
         setSuccess(true);
+
+        // 남은 횟수 정보 업데이트
+        if (result.remainingMinute !== undefined && result.remainingDay !== undefined) {
+          setRemainingInfo({
+            minute: result.remainingMinute,
+            day: result.remainingDay,
+          });
+        }
+
         setTimeout(() => setSuccess(false), 3000);
       } else {
         setError(result.error || '댓글 작성에 실패했습니다.');
       }
     } catch (err) {
       console.error('Comment error:', err);
-      setError('댓글 작성 중 오류가 발생했습니다.');
+      // Firebase HttpsError에서 메시지 추출
+      const errorMessage = err instanceof Error ? err.message : '댓글 작성 중 오류가 발생했습니다.';
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [episodeId, selectedEmoji, text, anonId]);
+
+  // flagged되지 않은 댓글만 표시
+  const visibleComments = comments.filter(c => !c.moderation?.flagged);
+  const flaggedCount = comments.length - visibleComments.length;
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6">
       <h2 className="text-xl font-bold text-gray-800 mb-6">
-        댓글 ({comments.length})
+        댓글 ({visibleComments.length})
+        {flaggedCount > 0 && (
+          <span className="text-sm font-normal text-gray-400 ml-2">
+            +{flaggedCount}개 검토 중
+          </span>
+        )}
       </h2>
 
       {/* 댓글 작성 폼 */}
@@ -73,14 +131,20 @@ export default function CommentSection({ episodeId }: CommentSectionProps) {
             이모지 선택
           </label>
           <div className="flex flex-wrap gap-2">
-            {ALLOWED_EMOJIS.map((emoji) => (
+            {COMMENT_EMOJIS.map((emoji) => (
               <button
                 key={emoji}
                 type="button"
                 onClick={() => setSelectedEmoji(emoji)}
-                className={`emoji-btn ${
-                  selectedEmoji === emoji ? 'selected' : ''
-                }`}
+                disabled={isSubmitting}
+                className={`
+                  w-12 h-12 rounded-xl text-2xl transition-all
+                  ${selectedEmoji === emoji
+                    ? 'bg-indigo-100 ring-2 ring-indigo-500 scale-110'
+                    : 'bg-gray-50 hover:bg-gray-100 hover:scale-105'
+                  }
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                `}
               >
                 {emoji}
               </button>
@@ -120,6 +184,11 @@ export default function CommentSection({ episodeId }: CommentSectionProps) {
         {success && (
           <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-lg text-sm">
             댓글이 등록되었습니다!
+            {remainingInfo && (
+              <span className="block text-xs text-green-500 mt-1">
+                남은 횟수: 1분 {remainingInfo.minute}회 / 오늘 {remainingInfo.day}회
+              </span>
+            )}
           </div>
         )}
 
@@ -139,12 +208,12 @@ export default function CommentSection({ episodeId }: CommentSectionProps) {
 
       {/* 댓글 목록 */}
       <div className="space-y-4">
-        {comments.length === 0 ? (
+        {visibleComments.length === 0 ? (
           <p className="text-center text-gray-400 py-8">
             첫 번째 댓글을 남겨보세요!
           </p>
         ) : (
-          comments.map((comment) => (
+          visibleComments.map((comment) => (
             <CommentItem key={comment.id} comment={comment} />
           ))
         )}
@@ -158,7 +227,7 @@ function CommentItem({ comment }: { comment: Comment }) {
 
   return (
     <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl animate-fade-in">
-      <span className="text-2xl">{comment.emoji}</span>
+      <span className="text-2xl flex-shrink-0">{comment.emoji}</span>
       <div className="flex-1 min-w-0">
         {comment.text && (
           <p className="text-gray-700 break-words">{comment.text}</p>

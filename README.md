@@ -179,15 +179,16 @@ firebase deploy
 | `generateStoryboard` | 일기 → 스토리보드 | `{ diary, characterId, panelCount? }` |
 | `generatePanelImage` | 패널 이미지 생성 | `{ draftId, panelIndex, regenerate? }` |
 | `publishToon` | 드래프트를 갤러리에 게시 | `{ draftId }` |
-| `addComment` | 댓글 추가 | `{ toonId, emoji, text }` |
+| `addComment` | 댓글 추가 | `{ episodeId, emoji, text, anonId }` |
 
 ## 보안 및 제한
 
-- **Rate Limiting**: IP 기반 요청 제한 (분당 5-20회)
-- **욕설 필터**: 금지어 목록 기반 필터링
+- **App Check**: reCAPTCHA v3 기반 봇 방지 ([설정 가이드](./docs/APP_CHECK_SETUP.md))
+- **Rate Limiting**: anonId 기반 요청 제한
+  - 댓글: 1분 3회, 1일 30회
+- **모더레이션**: 금칙어, URL, 반복문자 탐지 → flagged 처리
 - **댓글 제한**: 이모지 필수, 80자 이내 코멘트
 - **API 키 보호**: Secret Manager 사용, Functions에서만 접근
-- **App Check**: 프로덕션에서 활성화 권장
 
 ## 2단계 확장 계획
 

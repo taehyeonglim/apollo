@@ -182,11 +182,15 @@ export interface AddCommentRequest {
   episodeId: string;
   emoji: string;
   text: string;
+  anonId: string;  // localStorage UUID
 }
 
 export interface AddCommentResponse {
   success: boolean;
   commentId?: string;
+  flagged?: boolean;
+  remainingMinute?: number;
+  remainingDay?: number;
   error?: string;
 }
 
