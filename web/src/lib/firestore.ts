@@ -5,6 +5,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -16,7 +17,8 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Episode, EpisodeStatus, Comment, PanelPrompt } from '@/types';
+import type { Episode, EpisodeStatus, Comment, PanelPrompt, LibraryImage } from '@/types';
+import { deleteLibraryImage } from './storage';
 
 // Firestore 컬렉션 참조
 const episodesRef = collection(db, 'episodes');
@@ -264,4 +266,109 @@ export function subscribeToComments(
     });
     callback(comments);
   });
+}
+
+// ==========================================
+// Library 관련 함수
+// ==========================================
+
+/**
+ * 라이브러리 컬렉션 참조 생성
+ */
+function getLibraryRef(userId: string) {
+  return collection(db, 'users', userId, 'library');
+}
+
+/**
+ * 라이브러리 이미지 추가
+ */
+export async function addLibraryImage(
+  userId: string,
+  storagePath: string,
+  name: string
+): Promise<string> {
+  const libraryRef = getLibraryRef(userId);
+  const newDocRef = doc(libraryRef);
+
+  await setDoc(newDocRef, {
+    name,
+    storagePath,
+    createdAt: serverTimestamp(),
+  });
+
+  return newDocRef.id;
+}
+
+/**
+ * 라이브러리 이미지 목록 가져오기
+ */
+export async function getLibraryImages(userId: string): Promise<LibraryImage[]> {
+  const libraryRef = getLibraryRef(userId);
+  const q = query(libraryRef, orderBy('createdAt', 'desc'));
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      ...data,
+      createdAt: toDate(data.createdAt),
+      updatedAt: data.updatedAt ? toDate(data.updatedAt) : undefined,
+    } as LibraryImage;
+  });
+}
+
+/**
+ * 라이브러리 이미지 실시간 구독
+ */
+export function subscribeToLibraryImages(
+  userId: string,
+  callback: (images: LibraryImage[]) => void
+): () => void {
+  const libraryRef = getLibraryRef(userId);
+  const q = query(libraryRef, orderBy('createdAt', 'desc'));
+
+  return onSnapshot(q, (snapshot) => {
+    const images = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        createdAt: toDate(data.createdAt),
+        updatedAt: data.updatedAt ? toDate(data.updatedAt) : undefined,
+      } as LibraryImage;
+    });
+    callback(images);
+  });
+}
+
+/**
+ * 라이브러리 이미지 이름 수정
+ */
+export async function updateLibraryImageName(
+  userId: string,
+  imageId: string,
+  newName: string
+): Promise<void> {
+  const docRef = doc(db, 'users', userId, 'library', imageId);
+  await updateDoc(docRef, {
+    name: newName,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * 라이브러리 이미지 삭제 (Storage + Firestore)
+ */
+export async function removeLibraryImage(
+  userId: string,
+  imageId: string,
+  storagePath: string
+): Promise<void> {
+  // Storage에서 이미지 삭제
+  await deleteLibraryImage(storagePath);
+
+  // Firestore에서 문서 삭제
+  const docRef = doc(db, 'users', userId, 'library', imageId);
+  await deleteDoc(docRef);
 }

@@ -81,3 +81,42 @@ export async function getThumbnailUrl(episodeId: string): Promise<string> {
   const path = StoragePaths.episodeThumb(episodeId);
   return getPublicUrl(path);
 }
+
+// ==========================================
+// 라이브러리 관련 함수
+// ==========================================
+
+/**
+ * 라이브러리에 이미지 업로드
+ */
+export async function uploadLibraryImage(
+  userId: string,
+  file: File
+): Promise<string> {
+  const ext = file.name.split('.').pop() || 'png';
+  const timestamp = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 8);
+  const filename = `${timestamp}_${randomStr}.${ext}`;
+  const path = StoragePaths.libraryImage(userId, filename);
+  const storageRef = ref(storage, path);
+
+  await uploadBytes(storageRef, file, {
+    contentType: file.type,
+  });
+
+  return path;
+}
+
+/**
+ * 라이브러리 이미지 URL 가져오기
+ */
+export async function getLibraryImageUrl(storagePath: string): Promise<string> {
+  return getPublicUrl(storagePath);
+}
+
+/**
+ * 라이브러리 이미지 삭제
+ */
+export async function deleteLibraryImage(storagePath: string): Promise<void> {
+  await deleteFile(storagePath);
+}

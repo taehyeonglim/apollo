@@ -195,6 +195,22 @@ export interface AddCommentResponse {
 }
 
 // ==========================================
+// 라이브러리 이미지 타입
+// ==========================================
+
+/**
+ * LibraryImage 문서 (Firestore: users/{userId}/library/{imageId})
+ */
+export interface LibraryImage {
+  id: string;
+  name: string;              // 사용자가 지정한 이름 (예: "내 캐릭터")
+  storagePath: string;       // Storage 경로
+  thumbnailUrl?: string;     // 캐시된 썸네일 URL
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+// ==========================================
 // Storage 경로 헬퍼
 // ==========================================
 
@@ -214,6 +230,10 @@ export const StoragePaths = {
   /** 임시 업로드 */
   tempUpload: (userId: string, filename: string) =>
     `temp/${userId}/${filename}`,
+
+  /** 라이브러리 이미지 */
+  libraryImage: (userId: string, filename: string) =>
+    `library/${userId}/${filename}`,
 } as const;
 
 // ==========================================
