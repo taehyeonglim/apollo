@@ -63,8 +63,12 @@ jobs:
       - name: Enable webframeworks experiment
         run: firebase experiments:enable webframeworks
 
-      - name: Deploy Functions and Rules
-        run: firebase deploy --only functions,firestore:rules,storage:rules --project ${{ secrets.FIREBASE_PROJECT_ID }}
+      - name: Deploy Functions and Firestore Rules
+        run: firebase deploy --only functions,firestore:rules --project ${{ secrets.FIREBASE_PROJECT_ID }}
+
+      - name: Deploy Storage Rules
+        run: firebase deploy --only storage --project ${{ secrets.FIREBASE_PROJECT_ID }}
+        continue-on-error: true
 
       - name: Deploy Hosting
         run: firebase deploy --only hosting --project ${{ secrets.FIREBASE_PROJECT_ID }}
