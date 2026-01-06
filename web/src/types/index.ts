@@ -8,7 +8,7 @@
 export type EpisodeStatus = 'draft' | 'published';
 
 /**
- * 패널 정보 (Firestore 저장용)
+ * 패널 정보 (Firestore 저장용 - 이미지 생성 후)
  */
 export interface Panel {
   index: number;
@@ -16,36 +16,40 @@ export interface Panel {
   caption: string;
 }
 
+// ==========================================
+// FinalPrompt 구조 (새 스키마)
+// ==========================================
+
+/**
+ * 전역 스타일 설정
+ */
+export interface GlobalStyle {
+  artStyle: string;           // 그림체 (예: "cute chibi webtoon style")
+  colorPalette: string;       // 색상 팔레트 설명
+  cameraRules: string;        // 카메라/구도 규칙
+  typographyRules: string;    // 캡션 타이포그래피 규칙
+  negatives: string;          // 네거티브 프롬프트 (피해야 할 것들)
+}
+
 /**
  * 패널별 프롬프트 (finalPrompt 내부)
  */
 export interface PanelPrompt {
   index: number;
-  scene: string;
-  imagePrompt: string; // 이미지 생성에 사용된 최종 프롬프트 (영문)
-  caption: string;
-  emotion: string;
-  composition: string;
+  scene: string;              // 장면 설명 (한국어)
+  prompt: string;             // 이미지 생성 프롬프트 (영문, 캐릭터 묘사 포함)
+  captionDraft: string;       // 캡션 초안 (한국어, 30자 이내)
 }
 
 /**
- * 전역 스타일 정보 (finalPrompt 내부)
- */
-export interface GlobalStyle {
-  artStyle: string;
-  colorPalette: string;
-  mood: string;
-  characterDescription: string; // 캐릭터 텍스트 시트
-}
-
-/**
- * 최종 프롬프트 (중간 프롬프트는 저장 안 함)
+ * 최종 프롬프트 (Firestore에 저장되는 구조)
  */
 export interface FinalPrompt {
   title: string;
   summary: string;
-  globalStyle: GlobalStyle;
+  global: GlobalStyle;
   panels: PanelPrompt[];
+  characterSheetDigest?: string;  // 캐릭터 시트 해시 (변경 추적용)
   generatedAt: Date;
 }
 
@@ -57,7 +61,7 @@ export interface Episode {
   status: EpisodeStatus;
   title: string;
   diaryText: string; // 원본 일기 텍스트
-  finalPrompt: FinalPrompt; // 최종 버전만 저장
+  finalPrompt?: FinalPrompt; // optional until generated
   panelCount: number;
   panels: Panel[];
   thumbPath?: string; // Storage 경로: episodes/{episodeId}/thumb.png
@@ -65,15 +69,6 @@ export interface Episode {
   updatedAt: Date;
   publishedAt?: Date;
   creatorUid: string; // Firebase Auth UID
-}
-
-/**
- * Episode 생성 시 입력 (클라이언트 → Functions)
- */
-export interface CreateEpisodeInput {
-  diaryText: string;
-  panelCount?: number; // 기본 4
-  characterId?: string; // 캐릭터 선택 (기본 'default')
 }
 
 /**
@@ -94,15 +89,6 @@ export interface Comment {
   createdAt: Date;
   anonIdHash: string; // 익명 식별자 해시 (rate limit용)
   moderation: CommentModeration;
-}
-
-/**
- * Comment 생성 시 입력 (클라이언트 → Functions)
- */
-export interface CreateCommentInput {
-  episodeId: string;
-  emoji: string;
-  text: string;
 }
 
 /**
@@ -139,15 +125,18 @@ export interface Character {
 // ==========================================
 
 export interface GenerateStoryboardRequest {
+  episodeId: string;
   diaryText: string;
-  characterId?: string;
-  panelCount?: number;
+  panelCount?: number;         // 기본 4, 2~10 범위
+  characterSheetText: string;  // 캐릭터 시트 상세 텍스트
+  refImagePaths?: string[];    // Storage 경로 배열 (레퍼런스 이미지)
 }
 
 export interface GenerateStoryboardResponse {
   success: boolean;
   episodeId?: string;
-  finalPrompt?: FinalPrompt;
+  finalPrompt?: Omit<FinalPrompt, 'generatedAt' | 'characterSheetDigest'>;
+  remaining?: number;          // 남은 요청 횟수
   error?: string;
 }
 

@@ -1,13 +1,13 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { checkRateLimit, getClientIP } from './utils/rateLimit';
-import { containsBannedWords, BANNED_WORDS } from './utils/gemini';
+import { containsBannedWords, hashText } from './utils/gemini';
 import { ALLOWED_EMOJIS } from './utils/types';
 
 const db = admin.firestore();
 
 interface AddCommentRequest {
-  toonId: string;
+  episodeId: string;
   emoji: string;
   text: string;
 }
@@ -24,11 +24,11 @@ export const addComment = onCall(
     enforceAppCheck: false, // MVP에서는 비활성화
   },
   async (request) => {
-    const { toonId, emoji, text } = request.data as AddCommentRequest;
+    const { episodeId, emoji, text } = request.data as AddCommentRequest;
 
     // 입력 검증
-    if (!toonId) {
-      throw new HttpsError('invalid-argument', '툰 ID가 필요합니다.');
+    if (!episodeId) {
+      throw new HttpsError('invalid-argument', '에피소드 ID가 필요합니다.');
     }
 
     if (!emoji) {
@@ -36,7 +36,8 @@ export const addComment = onCall(
     }
 
     // 허용된 이모지 검증
-    if (!ALLOWED_EMOJIS.includes(emoji)) {
+    const allowedEmojiList: readonly string[] = ALLOWED_EMOJIS;
+    if (!allowedEmojiList.includes(emoji)) {
       throw new HttpsError('invalid-argument', '허용되지 않은 이모지입니다.');
     }
 
@@ -61,29 +62,40 @@ export const addComment = onCall(
       );
     }
 
-    // 툰 존재 확인
-    const toonRef = db.collection('toons').doc(toonId);
-    const toonDoc = await toonRef.get();
-    if (!toonDoc.exists) {
-      throw new HttpsError('not-found', '툰을 찾을 수 없습니다.');
+    // 에피소드 존재 확인 + published 상태 확인
+    const episodeRef = db.collection('episodes').doc(episodeId);
+    const episodeDoc = await episodeRef.get();
+    if (!episodeDoc.exists) {
+      throw new HttpsError('not-found', '에피소드를 찾을 수 없습니다.');
     }
 
+    const episodeData = episodeDoc.data();
+    if (episodeData?.status !== 'published') {
+      throw new HttpsError('permission-denied', '공개된 에피소드에만 댓글을 달 수 있습니다.');
+    }
+
+    // 익명 ID 해시 생성
+    const anonIdHash = await hashText(clientIP + episodeId);
+
     // 댓글 생성
-    const commentRef = toonRef.collection('comments').doc();
+    const commentRef = episodeRef.collection('comments').doc();
     const now = admin.firestore.Timestamp.now();
 
-    await db.runTransaction(async (transaction) => {
-      // 댓글 추가
-      transaction.set(commentRef, {
-        emoji,
-        text: trimmedText,
-        createdAt: now,
-      });
+    await commentRef.set({
+      emoji,
+      text: trimmedText,
+      createdAt: now,
+      anonIdHash,
+      moderation: {
+        flagged: false,
+      },
+    });
 
-      // 댓글 수 증가
-      transaction.update(toonRef, {
-        commentCount: admin.firestore.FieldValue.increment(1),
-      });
+    console.log('[addComment] Comment added:', {
+      episodeId,
+      commentId: commentRef.id,
+      emoji,
+      textLength: trimmedText.length,
     });
 
     return {

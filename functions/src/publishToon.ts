@@ -1,16 +1,16 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { checkRateLimit, getClientIP } from './utils/rateLimit';
-import type { Draft, Toon } from './utils/types';
+import type { Episode } from './utils/types';
 
 const db = admin.firestore();
 
-interface PublishToonRequest {
-  draftId: string;
+interface PublishEpisodeRequest {
+  episodeId: string;
 }
 
 /**
- * 드래프트를 공개 툰으로 게시
+ * 에피소드를 공개 상태로 게시
  */
 export const publishToon = onCall(
   {
@@ -20,10 +20,10 @@ export const publishToon = onCall(
     enforceAppCheck: false,
   },
   async (request) => {
-    const { draftId } = request.data as PublishToonRequest;
+    const { episodeId } = request.data as PublishEpisodeRequest;
 
-    if (!draftId) {
-      throw new HttpsError('invalid-argument', '드래프트 ID가 필요합니다.');
+    if (!episodeId) {
+      throw new HttpsError('invalid-argument', '에피소드 ID가 필요합니다.');
     }
 
     // Rate limiting
@@ -33,58 +33,59 @@ export const publishToon = onCall(
       throw new HttpsError('resource-exhausted', '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
     }
 
-    // 드래프트 로드
-    const draftDoc = await db.collection('drafts').doc(draftId).get();
-    if (!draftDoc.exists) {
-      throw new HttpsError('not-found', '드래프트를 찾을 수 없습니다.');
+    // 에피소드 로드
+    const episodeRef = db.collection('episodes').doc(episodeId);
+    const episodeDoc = await episodeRef.get();
+    if (!episodeDoc.exists) {
+      throw new HttpsError('not-found', '에피소드를 찾을 수 없습니다.');
     }
-    const draft = { id: draftDoc.id, ...draftDoc.data() } as Draft;
+    const episode = episodeDoc.data() as Episode;
+
+    // 권한 확인 (옵션: 인증된 경우)
+    if (request.auth?.uid && episode.creatorUid !== request.auth.uid) {
+      throw new HttpsError('permission-denied', '본인의 에피소드만 게시할 수 있습니다.');
+    }
+
+    // 이미 게시된 경우
+    if (episode.status === 'published') {
+      return {
+        success: true,
+        message: '이미 게시된 에피소드입니다.',
+      };
+    }
 
     // 검증
-    if (!draft.storyboard) {
+    if (!episode.finalPrompt) {
       throw new HttpsError('failed-precondition', '스토리보드가 없습니다.');
     }
 
-    if (!draft.panels || draft.panels.length === 0) {
+    if (!episode.panels || episode.panels.length === 0) {
       throw new HttpsError('failed-precondition', '생성된 이미지가 없습니다.');
     }
 
     // 모든 패널이 생성되었는지 확인
-    const expectedPanels = draft.storyboard.panels.length;
-    if (draft.panels.length < expectedPanels) {
+    const expectedPanels = episode.finalPrompt.panels.length;
+    if (episode.panels.length < expectedPanels) {
       throw new HttpsError(
         'failed-precondition',
-        `모든 패널 이미지가 생성되지 않았습니다. (${draft.panels.length}/${expectedPanels})`
+        `모든 패널 이미지가 생성되지 않았습니다. (${episode.panels.length}/${expectedPanels})`
       );
     }
 
     const now = admin.firestore.Timestamp.now();
 
-    // 툰 문서 생성
-    const toonRef = db.collection('toons').doc();
-    const toon: Omit<Toon, 'id'> = {
-      title: draft.storyboard.title,
-      originalDiary: draft.originalDiary,
-      storyboard: draft.storyboard, // 최종 스토리보드만 저장
-      panels: draft.panels,
+    // 상태 업데이트
+    await episodeRef.update({
       status: 'published',
-      characterId: draft.characterId,
-      createdAt: draft.createdAt,
-      updatedAt: now,
       publishedAt: now,
-      viewCount: 0,
-      commentCount: 0,
-    };
-
-    // 트랜잭션으로 툰 생성 + 드래프트 삭제
-    await db.runTransaction(async (transaction) => {
-      transaction.set(toonRef, toon);
-      transaction.delete(draftDoc.ref);
+      updatedAt: now,
     });
+
+    console.log('[publishToon] Episode published:', { episodeId });
 
     return {
       success: true,
-      toonId: toonRef.id,
+      episodeId,
     };
   }
 );
