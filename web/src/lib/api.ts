@@ -1,5 +1,5 @@
-import { httpsCallable } from 'firebase/functions';
-import { functions } from './firebase';
+import { httpsCallable, Functions } from 'firebase/functions';
+import { initializeFirebase } from './firebase';
 import type {
   GenerateStoryboardRequest,
   GenerateStoryboardResponse,
@@ -11,6 +11,11 @@ import type {
   AddCommentResponse,
 } from '@/types';
 
+// Functions 인스턴스를 lazy하게 가져오기
+function getFunctions(): Functions {
+  return initializeFirebase().functions;
+}
+
 /**
  * Cloud Functions 호출 래퍼
  */
@@ -20,7 +25,7 @@ export async function generateStoryboard(
   request: GenerateStoryboardRequest
 ): Promise<GenerateStoryboardResponse> {
   const fn = httpsCallable<GenerateStoryboardRequest, GenerateStoryboardResponse>(
-    functions,
+    getFunctions(),
     'generateStoryboard'
   );
   const result = await fn(request);
@@ -32,7 +37,7 @@ export async function generatePanelImages(
   request: GeneratePanelImagesRequest
 ): Promise<GeneratePanelImagesResponse> {
   const fn = httpsCallable<GeneratePanelImagesRequest, GeneratePanelImagesResponse>(
-    functions,
+    getFunctions(),
     'generatePanelImages'
   );
   const result = await fn(request);
@@ -44,7 +49,7 @@ export async function publishEpisode(
   request: PublishEpisodeRequest
 ): Promise<PublishEpisodeResponse> {
   const fn = httpsCallable<PublishEpisodeRequest, PublishEpisodeResponse>(
-    functions,
+    getFunctions(),
     'publishToon'
   );
   const result = await fn(request);
@@ -56,7 +61,7 @@ export async function addComment(
   request: AddCommentRequest
 ): Promise<AddCommentResponse> {
   const fn = httpsCallable<AddCommentRequest, AddCommentResponse>(
-    functions,
+    getFunctions(),
     'addComment'
   );
   const result = await fn(request);
