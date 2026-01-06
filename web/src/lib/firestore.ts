@@ -295,16 +295,24 @@ export async function addLibraryImage(
   storagePath: string,
   name: string
 ): Promise<string> {
-  const libraryRef = getLibraryRef(userId);
-  const newDocRef = doc(libraryRef);
+  console.log('[Firestore] addLibraryImage started', { userId, storagePath, name });
 
-  await setDoc(newDocRef, {
-    name,
-    storagePath,
-    createdAt: serverTimestamp(),
-  });
+  try {
+    const libraryRef = getLibraryRef(userId);
+    const newDocRef = doc(libraryRef);
 
-  return newDocRef.id;
+    await setDoc(newDocRef, {
+      name,
+      storagePath,
+      createdAt: serverTimestamp(),
+    });
+
+    console.log('[Firestore] addLibraryImage complete, id:', newDocRef.id);
+    return newDocRef.id;
+  } catch (error) {
+    console.error('[Firestore] addLibraryImage error:', error);
+    throw error;
+  }
 }
 
 /**

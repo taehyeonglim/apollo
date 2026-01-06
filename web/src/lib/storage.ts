@@ -13,6 +13,16 @@ function getStorage(): FirebaseStorage {
   return initializeFirebase().storage;
 }
 
+// 타임아웃 유틸리티
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    ),
+  ]);
+}
+
 /**
  * 레퍼런스 이미지를 temp 경로에 업로드
  * Storage Rules: temp/{userId}/ 경로만 클라이언트 업로드 허용
@@ -99,18 +109,34 @@ export async function uploadLibraryImage(
   userId: string,
   file: File
 ): Promise<string> {
-  const ext = file.name.split('.').pop() || 'png';
-  const timestamp = Date.now();
-  const randomStr = Math.random().toString(36).substring(2, 8);
-  const filename = `${timestamp}_${randomStr}.${ext}`;
-  const path = StoragePaths.libraryImage(userId, filename);
-  const storageRef = ref(getStorage(), path);
+  console.log('[Storage] uploadLibraryImage started', { userId, fileName: file.name });
 
-  await uploadBytes(storageRef, file, {
-    contentType: file.type,
-  });
+  try {
+    const storage = getStorage();
+    console.log('[Storage] Got storage instance');
 
-  return path;
+    const ext = file.name.split('.').pop() || 'png';
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    const filename = `${timestamp}_${randomStr}.${ext}`;
+    const path = StoragePaths.libraryImage(userId, filename);
+
+    console.log('[Storage] Uploading to path:', path);
+    const storageRef = ref(storage, path);
+
+    // 30초 타임아웃
+    await withTimeout(
+      uploadBytes(storageRef, file, { contentType: file.type }),
+      30000,
+      '업로드 시간 초과 (30초). 네트워크 상태를 확인해주세요.'
+    );
+
+    console.log('[Storage] Upload complete:', path);
+    return path;
+  } catch (error) {
+    console.error('[Storage] Upload error:', error);
+    throw error;
+  }
 }
 
 /**
