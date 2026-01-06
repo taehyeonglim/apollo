@@ -195,9 +195,17 @@ export const generatePanelImages = onCall(
     secrets: [geminiApiKey],
     timeoutSeconds: 540, // 9분 (여러 패널 생성 고려)
     memory: '1GiB',
-    enforceAppCheck: false,
+    enforceAppCheck: true,
   },
   async (request) => {
+    // ----------------------------------------
+    // 0. 인증 확인
+    // ----------------------------------------
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const uid = request.auth.uid;
+
     // ----------------------------------------
     // 1. 입력 검증
     // ----------------------------------------
@@ -239,6 +247,11 @@ export const generatePanelImages = onCall(
     }
 
     const episode = episodeDoc.data() as Episode;
+
+    // 권한 확인
+    if (episode.creatorUid !== uid) {
+      throw new HttpsError('permission-denied', '본인의 에피소드만 수정할 수 있습니다.');
+    }
 
     if (!episode.finalPrompt) {
       throw new HttpsError(

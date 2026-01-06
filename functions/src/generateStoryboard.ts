@@ -129,9 +129,17 @@ export const generateStoryboard = onCall(
     secrets: [geminiApiKey],
     timeoutSeconds: 120,
     memory: '512MiB',
-    enforceAppCheck: false, // 프로덕션에서 true로 변경
+    enforceAppCheck: true,
   },
   async (request) => {
+    // ----------------------------------------
+    // 0. 인증 확인
+    // ----------------------------------------
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const uid = request.auth.uid;
+
     // ----------------------------------------
     // 1. 입력 검증 (Zod)
     // ----------------------------------------
@@ -200,7 +208,7 @@ export const generateStoryboard = onCall(
         panels: [],
         createdAt: now,
         updatedAt: now,
-        creatorUid: request.auth?.uid || 'anonymous',
+        creatorUid: uid,
       });
       console.log('[generateStoryboard] Created new episode:', { episodeId });
     }

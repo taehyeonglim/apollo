@@ -23,9 +23,15 @@ export const generatePanelImage = onCall(
     secrets: [geminiApiKey],
     timeoutSeconds: 180,
     memory: '1GiB',
-    enforceAppCheck: false,
+    enforceAppCheck: true,
   },
   async (request) => {
+    // 인증 확인
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const uid = request.auth.uid;
+
     const { episodeId, panelIndex, regenerate = false } = request.data as GeneratePanelImageRequest;
 
     // 입력 검증
@@ -46,6 +52,11 @@ export const generatePanelImage = onCall(
       throw new HttpsError('not-found', '에피소드를 찾을 수 없습니다.');
     }
     const episode = episodeDoc.data() as Episode;
+
+    // 권한 확인
+    if (episode.creatorUid !== uid) {
+      throw new HttpsError('permission-denied', '본인의 에피소드만 수정할 수 있습니다.');
+    }
 
     if (!episode.finalPrompt) {
       throw new HttpsError('failed-precondition', '스토리보드가 없습니다. 먼저 스토리보드를 생성해주세요.');

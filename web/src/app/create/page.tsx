@@ -86,10 +86,10 @@ function CreateContent() {
       const episodeId = generateEpisodeId();
       let refImagePaths: string[] = [];
 
-      // 1. 레퍼런스 이미지 업로드
+      // 1. 레퍼런스 이미지 업로드 (temp/{userId}/ 경로로)
       if (refImages.length > 0) {
         showToast('info', '레퍼런스 이미지 업로드 중...');
-        refImagePaths = await uploadReferenceImages(episodeId, refImages);
+        refImagePaths = await uploadReferenceImages(user.uid, episodeId, refImages);
       }
 
       // 2. 스토리보드 생성

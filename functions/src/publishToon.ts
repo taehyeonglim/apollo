@@ -17,9 +17,15 @@ export const publishToon = onCall(
     region: 'asia-northeast3',
     timeoutSeconds: 30,
     memory: '256MiB',
-    enforceAppCheck: false,
+    enforceAppCheck: true,
   },
   async (request) => {
+    // 인증 확인
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const uid = request.auth.uid;
+
     const { episodeId } = request.data as PublishEpisodeRequest;
 
     if (!episodeId) {
@@ -41,8 +47,8 @@ export const publishToon = onCall(
     }
     const episode = episodeDoc.data() as Episode;
 
-    // 권한 확인 (옵션: 인증된 경우)
-    if (request.auth?.uid && episode.creatorUid !== request.auth.uid) {
+    // 권한 확인
+    if (episode.creatorUid !== uid) {
       throw new HttpsError('permission-denied', '본인의 에피소드만 게시할 수 있습니다.');
     }
 

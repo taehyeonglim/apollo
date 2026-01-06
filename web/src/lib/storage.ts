@@ -8,16 +8,18 @@ import { storage } from './firebase';
 import { StoragePaths } from '@/types';
 
 /**
- * 레퍼런스 이미지 업로드
+ * 레퍼런스 이미지를 temp 경로에 업로드
+ * Storage Rules: temp/{userId}/ 경로만 클라이언트 업로드 허용
  */
 export async function uploadReferenceImage(
+  userId: string,
   episodeId: string,
   file: File,
   index: number
 ): Promise<string> {
   const ext = file.name.split('.').pop() || 'png';
-  const filename = `ref_${index}.${ext}`;
-  const path = StoragePaths.episodeRef(episodeId, filename);
+  const filename = `${episodeId}_ref_${index}.${ext}`;
+  const path = StoragePaths.tempUpload(userId, filename);
   const storageRef = ref(storage, path);
 
   await uploadBytes(storageRef, file, {
@@ -31,13 +33,14 @@ export async function uploadReferenceImage(
  * 여러 레퍼런스 이미지 업로드
  */
 export async function uploadReferenceImages(
+  userId: string,
   episodeId: string,
   files: File[]
 ): Promise<string[]> {
   const paths: string[] = [];
 
   for (let i = 0; i < files.length; i++) {
-    const path = await uploadReferenceImage(episodeId, files[i], i);
+    const path = await uploadReferenceImage(userId, episodeId, files[i], i);
     paths.push(path);
   }
 
