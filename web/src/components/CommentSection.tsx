@@ -7,10 +7,10 @@ import type { Comment } from '@/types';
 import { ALLOWED_EMOJIS } from '@/types';
 
 interface CommentSectionProps {
-  toonId: string;
+  episodeId: string;
 }
 
-export default function CommentSection({ toonId }: CommentSectionProps) {
+export default function CommentSection({ episodeId }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
   const [text, setText] = useState('');
@@ -20,9 +20,9 @@ export default function CommentSection({ toonId }: CommentSectionProps) {
 
   // 댓글 실시간 구독
   useEffect(() => {
-    const unsubscribe = subscribeToComments(toonId, setComments);
+    const unsubscribe = subscribeToComments(episodeId, setComments);
     return () => unsubscribe();
-  }, [toonId]);
+  }, [episodeId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +38,7 @@ export default function CommentSection({ toonId }: CommentSectionProps) {
 
     try {
       const result = await addComment({
-        toonId,
+        episodeId,
         emoji: selectedEmoji,
         text: text.trim(),
       });

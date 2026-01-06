@@ -152,6 +152,23 @@ export interface GeneratePanelImageResponse {
   error?: string;
 }
 
+export type AspectRatio = '4:5' | '9:16' | '1:1';
+
+export interface GeneratePanelImagesRequest {
+  episodeId: string;
+  aspectRatio?: AspectRatio;    // 기본 '4:5'
+  refImagePaths?: string[];     // Storage 경로 배열 (캐릭터 레퍼런스)
+  indices?: number[];           // 특정 패널만 생성/재생성할 때
+}
+
+export interface GeneratePanelImagesResponse {
+  success: boolean;
+  episodeId: string;
+  generated: { index: number; imagePath: string }[];
+  failed: number[];
+  message: string;
+}
+
 export interface PublishEpisodeRequest {
   episodeId: string;
 }

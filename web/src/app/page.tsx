@@ -1,147 +1,104 @@
-'use client';
-
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { generateStoryboard } from '@/lib/api';
-
-// MVP에서는 기본 캐릭터 ID 사용
-const DEFAULT_CHARACTER_ID = 'default';
+import Link from 'next/link';
 
 export default function HomePage() {
-  const router = useRouter();
-  const [diary, setDiary] = useState('');
-  const [panelCount, setPanelCount] = useState(4);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!diary.trim()) {
-      setError('일기 내용을 입력해주세요.');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const result = await generateStoryboard({
-        diary: diary.trim(),
-        characterId: DEFAULT_CHARACTER_ID,
-        panelCount,
-      });
-
-      if (result.success && result.draftId) {
-        // 에디터 페이지로 이동
-        router.push(`/editor/${result.draftId}`);
-      } else {
-        setError(result.error || '스토리보드 생성에 실패했습니다.');
-      }
-    } catch (err) {
-      console.error('Error:', err);
-      setError('오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      {/* 히어로 섹션 */}
-      <div className="text-center mb-12 animate-fade-in">
-        <h1 className="text-4xl md:text-5xl font-bold text-indigo-900 mb-4">
-          일기를 인스타툰으로
-        </h1>
-        <p className="text-lg text-indigo-700">
-          오늘 하루를 적어보세요. AI가 귀여운 만화로 바꿔드릴게요.
-        </p>
-      </div>
+    <div className="min-h-[80vh] bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+      <div className="max-w-6xl mx-auto px-4 py-16 md:py-24">
+        {/* 히어로 섹션 */}
+        <div className="text-center mb-16">
+          <div className="text-6xl md:text-8xl mb-6 animate-bounce-slow">🌙</div>
+          <h1 className="text-4xl md:text-6xl font-bold text-indigo-900 mb-4">
+            일기를 인스타툰으로
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            오늘 하루를 적어보세요. AI가 당신의 일상을 귀여운 만화로 바꿔드릴게요.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href="/create"
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+            >
+              ✨ 시작하기
+            </Link>
+            <Link
+              href="/gallery"
+              className="inline-flex items-center justify-center gap-2 bg-white text-indigo-600 px-8 py-4 rounded-2xl font-bold text-lg border-2 border-indigo-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+            >
+              🎨 갤러리 둘러보기
+            </Link>
+          </div>
+        </div>
 
-      {/* 입력 폼 */}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* 일기 입력 */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 animate-fade-in">
-          <label
-            htmlFor="diary"
-            className="block text-lg font-semibold text-indigo-900 mb-3"
-          >
-            오늘의 일기
-          </label>
-          <textarea
-            id="diary"
-            value={diary}
-            onChange={(e) => setDiary(e.target.value)}
-            placeholder="오늘 있었던 일을 자유롭게 적어보세요...&#10;&#10;예: 오늘 카페에서 공부하다가 깜빡 졸았는데, 일어나니까 옆자리 사람이 내 커피를 마시고 있었다. 서로 눈이 마주치고 어색하게 웃었다..."
-            className="w-full h-48 p-4 border border-indigo-200 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-            maxLength={5000}
-            disabled={isLoading}
+        {/* 기능 카드 */}
+        <div className="grid md:grid-cols-3 gap-6 mb-16">
+          <FeatureCard
+            emoji="📝"
+            title="일기 작성"
+            description="오늘 있었던 일, 감정, 생각을 자유롭게 작성해주세요."
           />
-          <div className="flex justify-between items-center mt-2">
-            <span className="text-sm text-gray-500">
-              {diary.length} / 5000자
-            </span>
-          </div>
+          <FeatureCard
+            emoji="🤖"
+            title="AI 스토리보드"
+            description="Gemini AI가 일기를 분석하고 인스타툰 스토리보드를 생성합니다."
+          />
+          <FeatureCard
+            emoji="🎨"
+            title="이미지 생성"
+            description="캐릭터 일관성을 유지하며 패널별 이미지를 자동 생성합니다."
+          />
         </div>
 
-        {/* 옵션 */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 animate-fade-in">
-          <label className="block text-lg font-semibold text-indigo-900 mb-3">
-            패널 수
-          </label>
-          <div className="flex gap-3">
-            {[2, 4, 6, 8].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => setPanelCount(num)}
-                className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                  panelCount === num
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                }`}
-                disabled={isLoading}
-              >
-                {num}컷
-              </button>
-            ))}
+        {/* 플로우 설명 */}
+        <div className="bg-white rounded-3xl shadow-xl p-8 md:p-12">
+          <h2 className="text-2xl font-bold text-center text-indigo-900 mb-8">
+            어떻게 사용하나요?
+          </h2>
+          <div className="grid md:grid-cols-4 gap-6">
+            <StepCard step={1} title="일기 작성" description="오늘의 이야기를 적어요" />
+            <StepCard step={2} title="캐릭터 설정" description="나만의 캐릭터를 설명해요" />
+            <StepCard step={3} title="이미지 생성" description="AI가 만화를 그려요" />
+            <StepCard step={4} title="공유하기" description="갤러리에 게시해요" />
           </div>
         </div>
-
-        {/* 에러 메시지 */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 animate-fade-in">
-            {error}
-          </div>
-        )}
-
-        {/* 제출 버튼 */}
-        <button
-          type="submit"
-          disabled={isLoading || !diary.trim()}
-          className={`w-full py-4 rounded-2xl font-bold text-lg transition-all ${
-            isLoading || !diary.trim()
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-gradient-to-r from-indigo-600 to-pink-500 text-white hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]'
-          }`}
-        >
-          {isLoading ? (
-            <span className="flex items-center justify-center gap-3">
-              <span className="spinner !w-5 !h-5 !border-2"></span>
-              스토리보드 생성 중...
-            </span>
-          ) : (
-            '인스타툰 만들기 ✨'
-          )}
-        </button>
-      </form>
-
-      {/* 안내 */}
-      <div className="mt-12 text-center text-gray-600 text-sm">
-        <p>
-          생성된 인스타툰은 에디터에서 수정 후 갤러리에 게시할 수 있습니다.
-        </p>
       </div>
+    </div>
+  );
+}
+
+function FeatureCard({
+  emoji,
+  title,
+  description,
+}: {
+  emoji: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+      <div className="text-4xl mb-4">{emoji}</div>
+      <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
+      <p className="text-gray-600">{description}</p>
+    </div>
+  );
+}
+
+function StepCard({
+  step,
+  title,
+  description,
+}: {
+  step: number;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="text-center">
+      <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <span className="text-xl font-bold text-indigo-600">{step}</span>
+      </div>
+      <h3 className="font-bold text-gray-900 mb-1">{title}</h3>
+      <p className="text-sm text-gray-500">{description}</p>
     </div>
   );
 }

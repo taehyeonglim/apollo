@@ -3,6 +3,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
+  updateDoc,
   query,
   where,
   orderBy,
@@ -10,16 +12,14 @@ import {
   startAfter,
   onSnapshot,
   DocumentSnapshot,
-  QueryDocumentSnapshot,
   Timestamp,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Toon, Draft, Comment, Character, ToonStatus } from '@/types';
+import type { Episode, EpisodeStatus, Comment, PanelPrompt } from '@/types';
 
 // Firestore 컬렉션 참조
-const toonsRef = collection(db, 'toons');
-const draftsRef = collection(db, 'drafts');
-const charactersRef = collection(db, 'characters');
+const episodesRef = collection(db, 'episodes');
 
 /**
  * Firestore Timestamp을 Date로 변환
@@ -30,11 +30,15 @@ function toDate(timestamp: Timestamp | Date | undefined): Date {
   return timestamp.toDate();
 }
 
+// ==========================================
+// Episode 관련 함수
+// ==========================================
+
 /**
- * 툰 관련 함수
+ * 에피소드 가져오기
  */
-export async function getToon(id: string): Promise<Toon | null> {
-  const docRef = doc(toonsRef, id);
+export async function getEpisode(id: string): Promise<Episode | null> {
+  const docRef = doc(episodesRef, id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) return null;
@@ -46,16 +50,25 @@ export async function getToon(id: string): Promise<Toon | null> {
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
     publishedAt: data.publishedAt ? toDate(data.publishedAt) : undefined,
-  } as Toon;
+    finalPrompt: data.finalPrompt
+      ? {
+          ...data.finalPrompt,
+          generatedAt: toDate(data.finalPrompt.generatedAt),
+        }
+      : undefined,
+  } as Episode;
 }
 
-export async function getPublishedToons(
+/**
+ * 공개된 에피소드 목록 (페이지네이션)
+ */
+export async function getPublishedEpisodes(
   pageSize: number = 12,
   lastDoc?: DocumentSnapshot
-): Promise<{ toons: Toon[]; lastDoc: DocumentSnapshot | null }> {
+): Promise<{ episodes: Episode[]; lastDoc: DocumentSnapshot | null }> {
   let q = query(
-    toonsRef,
-    where('status', '==', 'published' as ToonStatus),
+    episodesRef,
+    where('status', '==', 'published' as EpisodeStatus),
     orderBy('publishedAt', 'desc'),
     limit(pageSize)
   );
@@ -65,45 +78,53 @@ export async function getPublishedToons(
   }
 
   const snapshot = await getDocs(q);
-  const toons = snapshot.docs.map((doc) => {
-    const data = doc.data();
+  const episodes = snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
     return {
-      id: doc.id,
+      id: docSnap.id,
       ...data,
       createdAt: toDate(data.createdAt),
       updatedAt: toDate(data.updatedAt),
       publishedAt: data.publishedAt ? toDate(data.publishedAt) : undefined,
-    } as Toon;
+    } as Episode;
   });
 
   const last = snapshot.docs[snapshot.docs.length - 1] || null;
-  return { toons, lastDoc: last };
+  return { episodes, lastDoc: last };
 }
 
 /**
- * 드래프트 관련 함수
+ * 사용자의 에피소드 목록
  */
-export async function getDraft(id: string): Promise<Draft | null> {
-  const docRef = doc(draftsRef, id);
-  const docSnap = await getDoc(docRef);
+export async function getUserEpisodes(userId: string): Promise<Episode[]> {
+  const q = query(
+    episodesRef,
+    where('creatorUid', '==', userId),
+    orderBy('updatedAt', 'desc'),
+    limit(50)
+  );
 
-  if (!docSnap.exists()) return null;
-
-  const data = docSnap.data();
-  return {
-    id: docSnap.id,
-    ...data,
-    createdAt: toDate(data.createdAt),
-    updatedAt: toDate(data.updatedAt),
-  } as Draft;
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      ...data,
+      createdAt: toDate(data.createdAt),
+      updatedAt: toDate(data.updatedAt),
+      publishedAt: data.publishedAt ? toDate(data.publishedAt) : undefined,
+    } as Episode;
+  });
 }
 
-// 드래프트 실시간 구독
-export function subscribeToDraft(
+/**
+ * 에피소드 실시간 구독
+ */
+export function subscribeToEpisode(
   id: string,
-  callback: (draft: Draft | null) => void
+  callback: (episode: Episode | null) => void
 ): () => void {
-  const docRef = doc(draftsRef, id);
+  const docRef = doc(episodesRef, id);
 
   return onSnapshot(docRef, (docSnap) => {
     if (!docSnap.exists()) {
@@ -117,73 +138,130 @@ export function subscribeToDraft(
       ...data,
       createdAt: toDate(data.createdAt),
       updatedAt: toDate(data.updatedAt),
-    } as Draft);
+      publishedAt: data.publishedAt ? toDate(data.publishedAt) : undefined,
+      finalPrompt: data.finalPrompt
+        ? {
+            ...data.finalPrompt,
+            generatedAt: toDate(data.finalPrompt.generatedAt),
+          }
+        : undefined,
+    } as Episode);
   });
 }
 
 /**
- * 댓글 관련 함수
+ * 새 에피소드 생성 (클라이언트에서 ID 생성)
+ */
+export async function createEpisode(
+  episodeId: string,
+  userId: string,
+  initialData?: Partial<Episode>
+): Promise<string> {
+  const docRef = doc(episodesRef, episodeId);
+
+  await setDoc(docRef, {
+    status: 'draft' as EpisodeStatus,
+    title: '',
+    diaryText: '',
+    panelCount: 4,
+    panels: [],
+    creatorUid: userId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...initialData,
+  });
+
+  return episodeId;
+}
+
+/**
+ * 에피소드 캡션 업데이트 (로컬 수정)
+ */
+export async function updateEpisodeCaptions(
+  episodeId: string,
+  panelCaptions: { index: number; caption: string }[]
+): Promise<void> {
+  const docRef = doc(episodesRef, episodeId);
+  const docSnap = await getDoc(docRef);
+
+  if (!docSnap.exists()) {
+    throw new Error('에피소드를 찾을 수 없습니다.');
+  }
+
+  const data = docSnap.data();
+  const finalPrompt = data.finalPrompt;
+
+  if (!finalPrompt) {
+    throw new Error('스토리보드가 없습니다.');
+  }
+
+  // finalPrompt.panels의 captionDraft 업데이트
+  const updatedPanels = finalPrompt.panels.map((panel: PanelPrompt) => {
+    const caption = panelCaptions.find((c) => c.index === panel.index);
+    return caption
+      ? { ...panel, captionDraft: caption.caption }
+      : panel;
+  });
+
+  // panels 배열의 caption 업데이트 (이미지 생성된 패널)
+  const updatedGeneratedPanels = (data.panels || []).map((panel: { index: number; caption: string; imagePath: string }) => {
+    const caption = panelCaptions.find((c) => c.index === panel.index);
+    return caption
+      ? { ...panel, caption: caption.caption }
+      : panel;
+  });
+
+  await updateDoc(docRef, {
+    'finalPrompt.panels': updatedPanels,
+    panels: updatedGeneratedPanels,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// ==========================================
+// Comment 관련 함수
+// ==========================================
+
+/**
+ * 댓글 목록 가져오기
  */
 export async function getComments(
-  toonId: string,
+  episodeId: string,
   pageSize: number = 50
 ): Promise<Comment[]> {
-  const commentsRef = collection(db, 'toons', toonId, 'comments');
+  const commentsRef = collection(db, 'episodes', episodeId, 'comments');
   const q = query(commentsRef, orderBy('createdAt', 'desc'), limit(pageSize));
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
     return {
-      id: doc.id,
-      toonId,
+      id: docSnap.id,
       ...data,
       createdAt: toDate(data.createdAt),
     } as Comment;
   });
 }
 
-// 댓글 실시간 구독
+/**
+ * 댓글 실시간 구독
+ */
 export function subscribeToComments(
-  toonId: string,
+  episodeId: string,
   callback: (comments: Comment[]) => void
 ): () => void {
-  const commentsRef = collection(db, 'toons', toonId, 'comments');
+  const commentsRef = collection(db, 'episodes', episodeId, 'comments');
   const q = query(commentsRef, orderBy('createdAt', 'desc'), limit(100));
 
   return onSnapshot(q, (snapshot) => {
-    const comments = snapshot.docs.map((doc) => {
-      const data = doc.data();
+    const comments = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
       return {
-        id: doc.id,
-        toonId,
+        id: docSnap.id,
         ...data,
         createdAt: toDate(data.createdAt),
       } as Comment;
     });
     callback(comments);
   });
-}
-
-/**
- * 캐릭터 관련 함수
- */
-export async function getCharacter(id: string): Promise<Character | null> {
-  const docRef = doc(charactersRef, id);
-  const docSnap = await getDoc(docRef);
-
-  if (!docSnap.exists()) return null;
-
-  return {
-    id: docSnap.id,
-    ...docSnap.data(),
-  } as Character;
-}
-
-export async function getAllCharacters(): Promise<Character[]> {
-  const snapshot = await getDocs(charactersRef);
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  } as Character));
 }

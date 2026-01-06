@@ -3,10 +3,10 @@ import { functions } from './firebase';
 import type {
   GenerateStoryboardRequest,
   GenerateStoryboardResponse,
-  GeneratePanelRequest,
-  GeneratePanelResponse,
-  PublishToonRequest,
-  PublishToonResponse,
+  GeneratePanelImagesRequest,
+  GeneratePanelImagesResponse,
+  PublishEpisodeRequest,
+  PublishEpisodeResponse,
   AddCommentRequest,
   AddCommentResponse,
 } from '@/types';
@@ -27,42 +27,23 @@ export async function generateStoryboard(
   return result.data;
 }
 
-// 패널 이미지 생성
-export async function generatePanel(
-  request: GeneratePanelRequest
-): Promise<GeneratePanelResponse> {
-  const fn = httpsCallable<GeneratePanelRequest, GeneratePanelResponse>(
+// 패널 이미지 일괄 생성
+export async function generatePanelImages(
+  request: GeneratePanelImagesRequest
+): Promise<GeneratePanelImagesResponse> {
+  const fn = httpsCallable<GeneratePanelImagesRequest, GeneratePanelImagesResponse>(
     functions,
-    'generatePanelImage'
+    'generatePanelImages'
   );
   const result = await fn(request);
   return result.data;
 }
 
-// 모든 패널 이미지 일괄 생성
-export async function generateAllPanels(
-  draftId: string,
-  panelCount: number
-): Promise<GeneratePanelResponse[]> {
-  const results: GeneratePanelResponse[] = [];
-
-  // 순차적으로 생성 (API 부하 분산)
-  for (let i = 0; i < panelCount; i++) {
-    const result = await generatePanel({
-      draftId,
-      panelIndex: i,
-    });
-    results.push(result);
-  }
-
-  return results;
-}
-
-// 툰 게시
-export async function publishToon(
-  request: PublishToonRequest
-): Promise<PublishToonResponse> {
-  const fn = httpsCallable<PublishToonRequest, PublishToonResponse>(
+// 에피소드 게시
+export async function publishEpisode(
+  request: PublishEpisodeRequest
+): Promise<PublishEpisodeResponse> {
+  const fn = httpsCallable<PublishEpisodeRequest, PublishEpisodeResponse>(
     functions,
     'publishToon'
   );

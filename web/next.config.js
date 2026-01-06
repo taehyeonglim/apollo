@@ -20,6 +20,20 @@ const nextConfig = {
       allowedOrigins: ['localhost:3000', 'localhost:5002'],
     },
   },
+  // Firebase SDK 트랜스파일
+  transpilePackages: ['firebase', '@firebase/functions', 'undici'],
+  // Firebase SDK 및 Node.js 모듈 호환성 해결
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        net: false,
+        tls: false,
+        fs: false,
+      };
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;
