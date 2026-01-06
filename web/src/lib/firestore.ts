@@ -15,13 +15,21 @@ import {
   DocumentSnapshot,
   Timestamp,
   serverTimestamp,
+  Firestore,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { initializeFirebase } from './firebase';
 import type { Episode, EpisodeStatus, Comment, PanelPrompt, LibraryImage } from '@/types';
 import { deleteLibraryImage } from './storage';
 
-// Firestore 컬렉션 참조
-const episodesRef = collection(db, 'episodes');
+// Firestore 인스턴스를 lazy하게 가져오기
+function getDb(): Firestore {
+  return initializeFirebase().db;
+}
+
+// Firestore 컬렉션 참조 (lazy)
+function getEpisodesRef() {
+  return collection(getDb(), 'episodes');
+}
 
 /**
  * Firestore Timestamp을 Date로 변환
@@ -40,7 +48,7 @@ function toDate(timestamp: Timestamp | Date | undefined): Date {
  * 에피소드 가져오기
  */
 export async function getEpisode(id: string): Promise<Episode | null> {
-  const docRef = doc(episodesRef, id);
+  const docRef = doc(getEpisodesRef(), id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) return null;
@@ -69,7 +77,7 @@ export async function getPublishedEpisodes(
   lastDoc?: DocumentSnapshot
 ): Promise<{ episodes: Episode[]; lastDoc: DocumentSnapshot | null }> {
   let q = query(
-    episodesRef,
+    getEpisodesRef(),
     where('status', '==', 'published' as EpisodeStatus),
     orderBy('publishedAt', 'desc'),
     limit(pageSize)
@@ -100,7 +108,7 @@ export async function getPublishedEpisodes(
  */
 export async function getUserEpisodes(userId: string): Promise<Episode[]> {
   const q = query(
-    episodesRef,
+    getEpisodesRef(),
     where('creatorUid', '==', userId),
     orderBy('updatedAt', 'desc'),
     limit(50)
@@ -126,7 +134,7 @@ export function subscribeToEpisode(
   id: string,
   callback: (episode: Episode | null) => void
 ): () => void {
-  const docRef = doc(episodesRef, id);
+  const docRef = doc(getEpisodesRef(), id);
 
   return onSnapshot(docRef, (docSnap) => {
     if (!docSnap.exists()) {
@@ -159,7 +167,7 @@ export async function createEpisode(
   userId: string,
   initialData?: Partial<Episode>
 ): Promise<string> {
-  const docRef = doc(episodesRef, episodeId);
+  const docRef = doc(getEpisodesRef(), episodeId);
 
   await setDoc(docRef, {
     status: 'draft' as EpisodeStatus,
@@ -183,7 +191,7 @@ export async function updateEpisodeCaptions(
   episodeId: string,
   panelCaptions: { index: number; caption: string }[]
 ): Promise<void> {
-  const docRef = doc(episodesRef, episodeId);
+  const docRef = doc(getEpisodesRef(), episodeId);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
@@ -231,7 +239,7 @@ export async function getComments(
   episodeId: string,
   pageSize: number = 50
 ): Promise<Comment[]> {
-  const commentsRef = collection(db, 'episodes', episodeId, 'comments');
+  const commentsRef = collection(getDb(), 'episodes', episodeId, 'comments');
   const q = query(commentsRef, orderBy('createdAt', 'desc'), limit(pageSize));
 
   const snapshot = await getDocs(q);
@@ -252,7 +260,7 @@ export function subscribeToComments(
   episodeId: string,
   callback: (comments: Comment[]) => void
 ): () => void {
-  const commentsRef = collection(db, 'episodes', episodeId, 'comments');
+  const commentsRef = collection(getDb(), 'episodes', episodeId, 'comments');
   const q = query(commentsRef, orderBy('createdAt', 'desc'), limit(100));
 
   return onSnapshot(q, (snapshot) => {
@@ -276,7 +284,7 @@ export function subscribeToComments(
  * 라이브러리 컬렉션 참조 생성
  */
 function getLibraryRef(userId: string) {
-  return collection(db, 'users', userId, 'library');
+  return collection(getDb(), 'users', userId, 'library');
 }
 
 /**
@@ -350,7 +358,7 @@ export async function updateLibraryImageName(
   imageId: string,
   newName: string
 ): Promise<void> {
-  const docRef = doc(db, 'users', userId, 'library', imageId);
+  const docRef = doc(getDb(), 'users', userId, 'library', imageId);
   await updateDoc(docRef, {
     name: newName,
     updatedAt: serverTimestamp(),
@@ -369,6 +377,6 @@ export async function removeLibraryImage(
   await deleteLibraryImage(storagePath);
 
   // Firestore에서 문서 삭제
-  const docRef = doc(db, 'users', userId, 'library', imageId);
+  const docRef = doc(getDb(), 'users', userId, 'library', imageId);
   await deleteDoc(docRef);
 }
