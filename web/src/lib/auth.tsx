@@ -14,7 +14,13 @@ import {
   GoogleAuthProvider,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
-import { auth, initializeFirebase } from './firebase';
+import { initializeFirebase } from './firebase';
+import type { Auth } from 'firebase/auth';
+
+// Auth 인스턴스를 lazy하게 가져오기
+function getAuth(): Auth {
+  return initializeFirebase().auth;
+}
 
 // Auth Context 타입
 interface AuthContextType {
@@ -32,10 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Firebase 초기화 보장
-    initializeFirebase();
+    // Firebase 초기화 및 auth 인스턴스 가져오기
+    const authInstance = getAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(authInstance, (user) => {
       setUser(user);
       setLoading(false);
     });
@@ -50,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithPopup(getAuth(), provider);
     } catch (error) {
       console.error('[Auth] Google 로그인 실패:', error);
       throw error;
@@ -59,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
+      await firebaseSignOut(getAuth());
     } catch (error) {
       console.error('[Auth] 로그아웃 실패:', error);
       throw error;
