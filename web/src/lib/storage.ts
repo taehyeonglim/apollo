@@ -1,6 +1,7 @@
 import {
   ref,
   uploadBytes,
+  uploadBytesResumable,
   getDownloadURL,
   deleteObject,
   FirebaseStorage,
@@ -9,7 +10,7 @@ import { initializeFirebase } from './firebase';
 import { StoragePaths } from '@/types';
 
 // Storage 인스턴스를 lazy하게 가져오기
-function getStorage(): FirebaseStorage {
+function getStorageInstance(): FirebaseStorage {
   return initializeFirebase().storage;
 }
 
@@ -36,7 +37,7 @@ export async function uploadReferenceImage(
   const ext = file.name.split('.').pop() || 'png';
   const filename = `${episodeId}_ref_${index}.${ext}`;
   const path = StoragePaths.tempUpload(userId, filename);
-  const storageRef = ref(getStorage(), path);
+  const storageRef = ref(getStorageInstance(), path);
 
   await uploadBytes(storageRef, file, {
     contentType: file.type,
@@ -67,7 +68,7 @@ export async function uploadReferenceImages(
  * Storage 경로에서 공개 URL 가져오기
  */
 export async function getPublicUrl(path: string): Promise<string> {
-  const storageRef = ref(getStorage(), path);
+  const storageRef = ref(getStorageInstance(), path);
   return getDownloadURL(storageRef);
 }
 
@@ -75,7 +76,7 @@ export async function getPublicUrl(path: string): Promise<string> {
  * Storage 경로에서 파일 삭제
  */
 export async function deleteFile(path: string): Promise<void> {
-  const storageRef = ref(getStorage(), path);
+  const storageRef = ref(getStorageInstance(), path);
   await deleteObject(storageRef);
 }
 
@@ -112,8 +113,21 @@ export async function uploadLibraryImage(
   console.log('[Storage] uploadLibraryImage started', { userId, fileName: file.name });
 
   try {
-    const storage = getStorage();
+    const { storage, auth } = initializeFirebase();
     console.log('[Storage] Got storage instance');
+    console.log('[Storage] Current auth user:', auth.currentUser?.email || 'null');
+
+    if (!auth.currentUser) {
+      throw new Error('인증이 필요합니다. 다시 로그인해주세요.');
+    }
+
+    // Auth 토큰 갱신 (강제)
+    try {
+      const token = await auth.currentUser.getIdToken(true);
+      console.log('[Storage] Auth token refreshed, length:', token.length);
+    } catch (tokenError) {
+      console.error('[Storage] Token refresh error:', tokenError);
+    }
 
     const ext = file.name.split('.').pop() || 'png';
     const timestamp = Date.now();
@@ -122,14 +136,37 @@ export async function uploadLibraryImage(
     const path = StoragePaths.libraryImage(userId, filename);
 
     console.log('[Storage] Uploading to path:', path);
+    console.log('[Storage] Storage bucket:', storage.app.options.storageBucket);
     const storageRef = ref(storage, path);
 
-    // 30초 타임아웃
-    await withTimeout(
-      uploadBytes(storageRef, file, { contentType: file.type }),
-      30000,
-      '업로드 시간 초과 (30초). 네트워크 상태를 확인해주세요.'
-    );
+    // uploadBytesResumable 사용하여 상세 오류 확인
+    const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
+
+    await new Promise<void>((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          console.log('[Storage] Upload progress:', progress.toFixed(1) + '%');
+        },
+        (error) => {
+          console.error('[Storage] Upload error code:', error.code);
+          console.error('[Storage] Upload error message:', error.message);
+          console.error('[Storage] Upload error serverResponse:', error.serverResponse);
+          reject(error);
+        },
+        () => {
+          console.log('[Storage] Upload complete');
+          resolve();
+        }
+      );
+
+      // 30초 타임아웃
+      setTimeout(() => {
+        uploadTask.cancel();
+        reject(new Error('업로드 시간 초과 (30초). 네트워크 상태를 확인해주세요.'));
+      }, 30000);
+    });
 
     console.log('[Storage] Upload complete:', path);
     return path;
