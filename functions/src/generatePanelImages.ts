@@ -18,8 +18,8 @@ const AspectRatioSchema = z.enum(['4:5', '9:16', '1:1']).default('4:5');
 const GeneratePanelImagesInputSchema = z.object({
   episodeId: z.string().min(1, 'episodeId는 필수입니다'),
   aspectRatio: AspectRatioSchema,
-  refImagePaths: z.array(z.string()).max(5, '레퍼런스 이미지는 최대 5개').optional(),
-  indices: z.array(z.number().int().min(0)).optional(), // 특정 패널만 생성할 때
+  refImagePaths: z.array(z.string()).max(5, '레퍼런스 이미지는 최대 5개').optional().nullable(),
+  indices: z.array(z.number().int().min(0)).optional().nullable(), // 특정 패널만 생성할 때
 });
 
 export type AspectRatio = z.infer<typeof AspectRatioSchema>;
@@ -126,7 +126,7 @@ async function generateSinglePanelImage(
     ];
 
     const response = await genai.models.generateContent({
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'gemini-2.5-flash-image',
       contents: contents,
       config: {
         responseModalities: ['image', 'text'],
@@ -195,7 +195,7 @@ export const generatePanelImages = onCall(
     secrets: [geminiApiKey],
     timeoutSeconds: 540, // 9분 (여러 패널 생성 고려)
     memory: '1GiB',
-    enforceAppCheck: true,
+    enforceAppCheck: false, // 개발 중 비활성화
   },
   async (request) => {
     // ----------------------------------------

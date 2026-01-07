@@ -23,7 +23,7 @@ export const generatePanelImage = onCall(
     secrets: [geminiApiKey],
     timeoutSeconds: 180,
     memory: '1GiB',
-    enforceAppCheck: true,
+    enforceAppCheck: false, // 개발 중 비활성화
   },
   async (request) => {
     // 인증 확인

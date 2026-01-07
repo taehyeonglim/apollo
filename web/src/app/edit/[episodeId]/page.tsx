@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { RequireAuth, useAuth } from '@/lib/auth';
 import { useToast } from '@/components/Toast';
@@ -10,12 +10,9 @@ import { generatePanelImages, publishEpisode } from '@/lib/api';
 import { getPublicUrl } from '@/lib/storage';
 import type { Episode, PanelPrompt, AspectRatio } from '@/types';
 
-interface PageProps {
-  params: Promise<{ episodeId: string }>;
-}
-
-export default function EditPage({ params }: PageProps) {
-  const { episodeId } = use(params);
+export default function EditPage() {
+  const params = useParams();
+  const episodeId = params.episodeId as string;
 
   return (
     <RequireAuth>

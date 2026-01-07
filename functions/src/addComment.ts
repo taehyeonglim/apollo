@@ -93,7 +93,7 @@ export const addComment = onCall(
     region: 'asia-northeast3',
     timeoutSeconds: 10,
     memory: '128MiB',
-    enforceAppCheck: true,  // App Check 강제
+    enforceAppCheck: false, // 개발 중 비활성화
   },
   async (request) => {
     const { episodeId, emoji, text, anonId } = request.data as AddCommentRequest;

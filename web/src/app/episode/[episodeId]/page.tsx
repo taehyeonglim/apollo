@@ -1,18 +1,16 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getEpisode } from '@/lib/firestore';
 import { getPublicUrl } from '@/lib/storage';
 import CommentSection from '@/components/CommentSection';
 import type { Episode, Panel } from '@/types';
 
-interface PageProps {
-  params: Promise<{ episodeId: string }>;
-}
-
-export default function EpisodePage({ params }: PageProps) {
-  const { episodeId } = use(params);
+export default function EpisodePage() {
+  const params = useParams();
+  const episodeId = params.episodeId as string;
 
   const [episode, setEpisode] = useState<Episode | null>(null);
   const [loading, setLoading] = useState(true);

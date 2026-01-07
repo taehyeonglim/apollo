@@ -129,7 +129,7 @@ export const generateStoryboard = onCall(
     secrets: [geminiApiKey],
     timeoutSeconds: 120,
     memory: '512MiB',
-    enforceAppCheck: true,
+    enforceAppCheck: false, // 개발 중 비활성화
   },
   async (request) => {
     // ----------------------------------------
@@ -232,7 +232,7 @@ ${diaryText}
       console.log('[generateStoryboard] Calling Gemini API...');
 
       const response = await genai.models.generateContent({
-        model: 'gemini-2.5-flash-preview-05-20',
+        model: 'gemini-2.0-flash',
         contents: userPrompt,
         config: {
           systemInstruction: systemPrompt,

@@ -17,7 +17,7 @@ export const publishToon = onCall(
     region: 'asia-northeast3',
     timeoutSeconds: 30,
     memory: '256MiB',
-    enforceAppCheck: true,
+    enforceAppCheck: false, // 개발 중 비활성화
   },
   async (request) => {
     // 인증 확인
