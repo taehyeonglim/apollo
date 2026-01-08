@@ -26,7 +26,8 @@ export async function generateStoryboard(
 ): Promise<GenerateStoryboardResponse> {
   const fn = httpsCallable<GenerateStoryboardRequest, GenerateStoryboardResponse>(
     getFunctions(),
-    'generateStoryboard'
+    'generateStoryboard',
+    { timeout: 120000 } // 2분 타임아웃 (Cloud Function과 동일)
   );
   const result = await fn(request);
   return result.data;
@@ -38,7 +39,8 @@ export async function generatePanelImages(
 ): Promise<GeneratePanelImagesResponse> {
   const fn = httpsCallable<GeneratePanelImagesRequest, GeneratePanelImagesResponse>(
     getFunctions(),
-    'generatePanelImages'
+    'generatePanelImages',
+    { timeout: 540000 } // 9분 타임아웃 (Cloud Function: 540초)
   );
   const result = await fn(request);
   return result.data;

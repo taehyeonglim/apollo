@@ -29,7 +29,9 @@ export default function GalleryPage() {
     try {
       // 동적 import로 Firebase 모듈 로드
       const { getPublishedEpisodes } = await import('@/lib/firestore');
+      console.log('[Gallery] Loading published episodes...');
       const result = await getPublishedEpisodes(12);
+      console.log('[Gallery] Loaded episodes:', result.episodes.length, result.episodes);
       setEpisodes(result.episodes);
       setLastDoc(result.lastDoc);
       setHasMore(result.episodes.length >= 12);

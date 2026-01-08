@@ -104,9 +104,11 @@ function EditContent({ episodeId }: { episodeId: string }) {
         index: Number(index),
         caption,
       }));
+      console.log('[Caption] Saving captions:', captions);
       await updateEpisodeCaptions(episodeId, captions);
       showToast('success', '캡션이 저장되었습니다.');
     } catch (error) {
+      console.error('[Caption] Save error:', error);
       showToast('error', '캡션 저장에 실패했습니다.');
     }
   }, [episode, episodeId, editedCaptions, showToast]);
